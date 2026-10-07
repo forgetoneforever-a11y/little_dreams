@@ -1,5 +1,7 @@
 import asyncio
+import json
 import logging
+import os
 from datetime import datetime, timedelta
 
 from aiohttp import web
@@ -9,12 +11,12 @@ from aiogram.enums import ParseMode, ChatAction
 from aiogram.filters import CommandStart, Command
 from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton, BotCommand, CallbackQuery,
-    BotCommandScopeDefault, BotCommandScopeChat, MenuButtonCommands
+    BotCommandScopeDefault, BotCommandScopeChat, MenuButtonCommands, WebAppInfo
 )
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
 from config import (
-    BOT_TOKEN, ADMIN_IDS, WEBHOOK_URL, WEBHOOK_PATH, PORT,
+    BOT_TOKEN, ADMIN_IDS, WEBHOOK_URL, WEBHOOK_PATH, PORT, WEBHOOK_HOST,
     AUTO_REPLY_MINUTES, ANTIFLOOD_LIMIT, ANTIFLOOD_WINDOW, ANTIFLOOD_MUTE,
     ANTIFLOOD_STRIKES_TO_BAN, RULES_TEXT
 )
@@ -32,6 +34,10 @@ muted_until: dict[int, float] = {}
 strikes: dict[int, int] = {}
 pending: dict[int, int] = {}
 awaiting_reply: dict[int, float] = {}
+
+# ===== Папка с WebApp =====
+WEBAPP_DIR = os.path.join(os.path.dirname(__file__), "webapp")
+WEBAPP_URL = f"{WEBHOOK_HOST}/webapp"
 
 
 def is_admin(user_id: int) -> bool:
@@ -62,21 +68,30 @@ async def user_start(message: types.Message):
         return
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="🚀 Открыть приложение",
+            web_app=WebAppInfo(url=WEBAPP_URL)
+        )],
         [InlineKeyboardButton(text="📩 Написать в поддержку", callback_data="write_support")],
-        [InlineKeyboardButton(text="📚 Мои обращения", callback_data="my_tickets")],
         [InlineKeyboardButton(text="📜 Правила", callback_data="rules")],
         [InlineKeyboardButton(text="👤 Мой ID", callback_data="whoami")],
     ])
     await message.answer(
         "👋 <b>Добро пожаловать в Little Dreams!</b>\n\n"
         "Это служба поддержки 💭\n\n"
-        "Нажмите кнопку ниже или просто напишите сообщение — мы ответим.",
+        "Откройте мини-приложение 🚀 или напишите сообщение прямо здесь.",
         reply_markup=kb
     )
 
 
 @dp.message(CommandStart(), F.from_user.id.in_(ADMIN_IDS))
 async def admin_start(message: types.Message):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="🚀 Открыть приложение",
+            web_app=WebAppInfo(url=WEBAPP_URL)
+        )],
+    ])
     await message.answer(
         "👋 <b>Режим администратора</b>\n\n"
         "📌 <b>Команды:</b>\n"
@@ -89,9 +104,10 @@ async def admin_start(message: types.Message):
         "/unban &lt;id&gt; — разбанить\n"
         "/mute &lt;id&gt; &lt;минуты&gt; — тайм-аут\n"
         "/unmute &lt;id&gt; — снять тайм-аут\n"
-        "/banned — список забаненных\n"
+        "/banned — список заблокированных\n"
         "/rules — правила\n\n"
-        "💡 Или <b>Reply</b> на пересланное сообщение."
+        "💡 Или <b>Reply</b> на пересланное сообщение.",
+        reply_markup=kb
     )
 
 
@@ -152,21 +168,92 @@ async def cb_whoami(call: CallbackQuery):
     await call.answer()
 
 
-@dp.callback_query(F.data == "my_tickets")
-async def cb_my_tickets(call: CallbackQuery):
-    tickets = db.get_user_tickets(call.from_user.id, limit=5)
-    if not tickets:
-        await call.message.answer("📭 У вас пока нет обращений.")
-    else:
-        lines = ["📚 <b>Ваши последние обращения:</b>\n"]
-        for t in tickets:
-            status = "🟢 открыто" if t["status"] == "open" else "🔴 закрыто"
-            lines.append(
-                f"<b>#{t['id']:04d}</b> — {status}\n"
-                f"  └ {(t['last_message'] or '')[:60]}"
+# ================== WEBAPP DATA ==================
+
+@dp.message(F.web_app_data)
+async def webapp_data(message: types.Message):
+    try:
+        data = json.loads(message.web_app_data.data)
+    except Exception as e:
+        logging.warning(f"WebApp: ошибка парсинга: {e}")
+        await message.answer("⚠️ Ошибка данных из приложения.")
+        return
+
+    action = data.get("action")
+    user = message.from_user
+
+    # --- Отправка сообщения из WebApp ---
+    if action == "message":
+        text = (data.get("text") or "").strip()
+        if not text:
+            await message.answer("⚠️ Пустое сообщение.")
+            return
+
+        if db.is_banned(user.id):
+            await message.answer("🚫 Вы заблокированы.")
+            return
+
+        db.upsert_user(user.id, user.username or "", user.full_name)
+        ticket = db.get_open_ticket(user.id)
+        if ticket:
+            ticket_id = ticket["id"]
+            db.update_ticket_activity(ticket_id, text)
+        else:
+            ticket_id = db.create_ticket(user.id, user.username or "", user.full_name, text)
+
+        db.add_message(ticket_id, user.id, text, is_admin=False)
+        awaiting_reply[ticket_id] = datetime.utcnow().timestamp()
+
+        faq_answer = match_faq(text)
+        if faq_answer:
+            await message.answer(f"🤖 <b>Быстрый ответ:</b>\n\n{faq_answer}")
+            await asyncio.sleep(0.5)
+
+        header = (
+            f"📩 <b>Обращение #{ticket_id:04d}</b> <i>(из WebApp)</i>\n"
+            f"👤 {user.full_name} (@{user.username or '—'})\n"
+            f"🆔 <code>{user.id}</code>\n"
+            f"———\n{text}\n\n"
+            f"↩️ Reply или /reply {ticket_id} &lt;текст&gt;\n"
+            f"/close {ticket_id} — закрыть"
+        )
+
+        delivered = False
+        for admin_id in ADMIN_IDS:
+            try:
+                sent = await bot.send_message(admin_id, header)
+                pending[sent.message_id] = ticket_id
+                delivered = True
+            except Exception as e:
+                logging.warning(f"WebApp → админ {admin_id}: {e}")
+
+        if delivered:
+            await message.answer(
+                f"✅ Отправлено из приложения.\nНомер обращения: <b>#{ticket_id:04d}</b>"
             )
-        await call.message.answer("\n".join(lines))
-    await call.answer()
+        else:
+            await message.answer("⚠️ Не удалось доставить обращение.")
+
+    # --- Запрос тикетов из WebApp ---
+    elif action == "get_tickets":
+        tickets = db.get_user_tickets(user.id, limit=10)
+        if not tickets:
+            await message.answer("📭 У вас пока нет обращений.")
+        else:
+            lines = ["📚 <b>Ваши обращения:</b>\n"]
+            for t in tickets:
+                st = "🟢" if t["status"] == "open" else "🔴"
+                lines.append(
+                    f"{st} <b>#{t['id']:04d}</b> — {(t['last_message'] or '')[:60]}"
+                )
+            await message.answer("\n".join(lines))
+
+    # --- Открытие правил / FAQ из WebApp (на будущее) ---
+    elif action == "rules":
+        await message.answer(RULES_TEXT)
+
+    else:
+        logging.info(f"WebApp: неизвестное действие {action}")
 
 
 # ================== СООБЩЕНИЯ ОТ ПОЛЬЗОВАТЕЛЕЙ ==================
@@ -572,8 +659,6 @@ async def auto_reply_worker():
 
 
 # ================== МЕНЮ КОМАНД ==================
-# У пользователя — короткий список, у админа — расширенный.
-# Плюс кнопка «Меню» слева от поля ввода (MenuButtonCommands).
 
 USER_COMMANDS = [
     BotCommand(command="start", description="🏠 Начать"),
@@ -599,11 +684,12 @@ ADMIN_COMMANDS = [
 
 
 async def setup_commands():
-    """Глобальное меню для всех + отдельное для каждого админа + кнопка Меню."""
-    # 1. Глобальный список (для всех пользователей)
-    await bot.set_my_commands(USER_COMMANDS, scope=BotCommandScopeDefault())
+    """Меню команд: разные для пользователя и админа + кнопка Меню слева."""
+    try:
+        await bot.set_my_commands(USER_COMMANDS, scope=BotCommandScopeDefault())
+    except Exception as e:
+        logging.warning(f"set_my_commands default: {e}")
 
-    # 2. Для каждого админа — свой список (переопределяет глобальный в его чате)
     for admin_id in ADMIN_IDS:
         try:
             await bot.set_my_commands(
@@ -611,9 +697,9 @@ async def setup_commands():
                 scope=BotCommandScopeChat(chat_id=admin_id)
             )
         except Exception as e:
-            logging.warning(f"Не смог задать команды админу {admin_id}: {e}")
+            logging.warning(f"set_my_commands admin {admin_id}: {e}")
 
-    # 3. Кнопка «Меню» слева от поля ввода — глобально
+    # Кнопка «Меню» слева от поля ввода
     try:
         await bot.set_chat_menu_button(
             menu_button=MenuButtonCommands(type="commands")
@@ -621,7 +707,6 @@ async def setup_commands():
     except Exception as e:
         logging.warning(f"Menu button global: {e}")
 
-    # 4. Кнопка «Меню» для каждого админа (чтобы сразу видел свои команды)
     for admin_id in ADMIN_IDS:
         try:
             await bot.set_chat_menu_button(
@@ -629,7 +714,29 @@ async def setup_commands():
                 menu_button=MenuButtonCommands(type="commands")
             )
         except Exception as e:
-            logging.warning(f"Menu button для админа {admin_id}: {e}")
+            logging.warning(f"Menu button admin {admin_id}: {e}")
+
+
+# ================== WEBAPP — ОТДАЧА ФАЙЛОВ ==================
+
+async def serve_webapp(request):
+    """Отдаёт index.html мини-приложения."""
+    filepath = os.path.join(WEBAPP_DIR, "index.html")
+    if not os.path.exists(filepath):
+        return web.Response(status=404, text="WebApp not found")
+    return web.FileResponse(filepath)
+
+
+async def serve_webapp_file(request):
+    """Отдаёт статику WebApp (css, js, img)."""
+    filename = request.match_info.get("filename", "")
+    # Защита от path traversal
+    filepath = os.path.join(WEBAPP_DIR, filename)
+    if not os.path.abspath(filepath).startswith(os.path.abspath(WEBAPP_DIR)):
+        return web.Response(status=403, text="Forbidden")
+    if not os.path.exists(filepath):
+        return web.Response(status=404, text="Not found")
+    return web.FileResponse(filepath)
 
 
 # ================== ЗАПУСК ==================
@@ -638,18 +745,27 @@ async def on_startup(bot: Bot):
     db.init_db()
     logging.info(f"🚀 ADMIN_IDS = {ADMIN_IDS}")
     logging.info(f"🚀 WEBHOOK_URL = {WEBHOOK_URL}")
+    logging.info(f"🚀 WEBAPP_URL = {WEBAPP_URL}")
 
     await bot.set_webhook(WEBHOOK_URL)
     await setup_commands()
 
     asyncio.create_task(auto_reply_worker())
-    logging.info("✅ Webhook установлен, меню команд настроено, фоновые задачи запущены")
+    logging.info("✅ Webhook + меню + WebApp-роуты готовы")
 
 
 def main():
     dp.startup.register(on_startup)
     app = web.Application()
+
+    # Webhook для Telegram
     SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
+
+    # Мини-приложение (WebApp)
+    app.router.add_get("/webapp", serve_webapp)
+    app.router.add_get("/webapp/", serve_webapp)
+    app.router.add_get("/webapp/{filename}", serve_webapp_file)
+
     setup_application(app, dp, bot=bot)
     web.run_app(app, host="0.0.0.0", port=PORT)
 
