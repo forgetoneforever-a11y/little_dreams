@@ -8,7 +8,8 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode, ChatAction
 from aiogram.filters import CommandStart, Command
 from aiogram.types import (
-    InlineKeyboardMarkup, InlineKeyboardButton, BotCommand, CallbackQuery
+    InlineKeyboardMarkup, InlineKeyboardButton, BotCommand, CallbackQuery,
+    BotCommandScopeDefault, BotCommandScopeChat, MenuButtonCommands
 )
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
@@ -28,7 +29,7 @@ dp = Dispatcher()
 # ===== Состояние в памяти =====
 flood: dict[int, list[float]] = {}
 muted_until: dict[int, float] = {}
-strikes: dict[int, int] = {}          # сколько раз попался на флуде
+strikes: dict[int, int] = {}
 pending: dict[int, int] = {}
 awaiting_reply: dict[int, float] = {}
 
@@ -178,7 +179,6 @@ async def cb_my_tickets(call: CallbackQuery):
 async def user_message(message: types.Message):
     user = message.from_user
 
-    # проверка бана/мута
     if db.is_banned(user.id):
         b = db.get_ban(user.id)
         if b and b["type"] == "mute":
@@ -192,7 +192,6 @@ async def user_message(message: types.Message):
             await message.answer("🚫 Вы заблокированы в этом боте.")
         return
 
-    # антифлуд
     if is_flooding(user.id):
         n = strikes.get(user.id, 0)
         if n >= ANTIFLOOD_STRIKES_TO_BAN:
@@ -334,7 +333,7 @@ async def cmd_stats(message: types.Message):
         f"📨 Всего обращений: <b>{s['total']}</b>",
         f"📅 За сегодня: <b>{s['today']}</b>",
         f"🟢 Открытых: <b>{s['open']}</b>",
-        f"⏱ Среднее время первого ответа: <b>{avg}</b>",
+        f"⏱ Среднее время ответа: <b>{avg}</b>",
         f"🚫 Забанено/в муте: <b>{bans_count}</b>\n",
         "🏆 <b>Топ-5 активных:</b>"
     ]
@@ -573,34 +572,64 @@ async def auto_reply_worker():
 
 
 # ================== МЕНЮ КОМАНД ==================
+# У пользователя — короткий список, у админа — расширенный.
+# Плюс кнопка «Меню» слева от поля ввода (MenuButtonCommands).
 
-async def set_commands():
-    await bot.set_my_commands([
-        BotCommand(command="start", description="Начать"),
-        BotCommand(command="help", description="Помощь"),
-        BotCommand(command="rules", description="Правила"),
-        BotCommand(command="whoami", description="Мой ID"),
-    ])
+USER_COMMANDS = [
+    BotCommand(command="start", description="🏠 Начать"),
+    BotCommand(command="help", description="❓ Помощь"),
+    BotCommand(command="rules", description="📜 Правила"),
+    BotCommand(command="whoami", description="👤 Мой ID"),
+]
+
+ADMIN_COMMANDS = [
+    BotCommand(command="start", description="🏠 Начать"),
+    BotCommand(command="tickets", description="📋 Открытые обращения"),
+    BotCommand(command="reply", description="💬 Ответ: /reply <id> <текст>"),
+    BotCommand(command="close", description="✅ Закрыть: /close <id>"),
+    BotCommand(command="stats", description="📊 Статистика"),
+    BotCommand(command="broadcast", description="📢 Рассылка"),
+    BotCommand(command="ban", description="🚫 Забанить: /ban <id> [причина]"),
+    BotCommand(command="unban", description="♻️ Разбанить: /unban <id>"),
+    BotCommand(command="mute", description="⏳ Тайм-аут: /mute <id> <мин>"),
+    BotCommand(command="unmute", description="🔊 Снять тайм-аут"),
+    BotCommand(command="banned", description="📕 Список заблокированных"),
+    BotCommand(command="rules", description="📜 Правила"),
+]
 
 
-async def set_admin_commands(admin_id: int):
+async def setup_commands():
+    """Глобальное меню для всех + отдельное для каждого админа + кнопка Меню."""
+    # 1. Глобальный список (для всех пользователей)
+    await bot.set_my_commands(USER_COMMANDS, scope=BotCommandScopeDefault())
+
+    # 2. Для каждого админа — свой список (переопределяет глобальный в его чате)
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.set_my_commands(
+                ADMIN_COMMANDS,
+                scope=BotCommandScopeChat(chat_id=admin_id)
+            )
+        except Exception as e:
+            logging.warning(f"Не смог задать команды админу {admin_id}: {e}")
+
+    # 3. Кнопка «Меню» слева от поля ввода — глобально
     try:
-        await bot.set_my_commands([
-            BotCommand(command="start", description="Начать"),
-            BotCommand(command="tickets", description="Открытые обращения"),
-            BotCommand(command="reply", description="Ответ: /reply <id> <текст>"),
-            BotCommand(command="close", description="Закрыть: /close <id>"),
-            BotCommand(command="stats", description="Статистика"),
-            BotCommand(command="broadcast", description="Рассылка"),
-            BotCommand(command="ban", description="Забанить: /ban <id> [причина]"),
-            BotCommand(command="unban", description="Разбанить: /unban <id>"),
-            BotCommand(command="mute", description="Тайм-аут: /mute <id> <мин>"),
-            BotCommand(command="unmute", description="Снять тайм-аут"),
-            BotCommand(command="banned", description="Список заблокированных"),
-            BotCommand(command="rules", description="Правила"),
-        ], scope=types.BotCommandScopeChat(chat_id=admin_id))
+        await bot.set_chat_menu_button(
+            menu_button=MenuButtonCommands(type="commands")
+        )
     except Exception as e:
-        logging.warning(f"Не смог установить команды для админа {admin_id}: {e}")
+        logging.warning(f"Menu button global: {e}")
+
+    # 4. Кнопка «Меню» для каждого админа (чтобы сразу видел свои команды)
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.set_chat_menu_button(
+                chat_id=admin_id,
+                menu_button=MenuButtonCommands(type="commands")
+            )
+        except Exception as e:
+            logging.warning(f"Menu button для админа {admin_id}: {e}")
 
 
 # ================== ЗАПУСК ==================
@@ -611,12 +640,10 @@ async def on_startup(bot: Bot):
     logging.info(f"🚀 WEBHOOK_URL = {WEBHOOK_URL}")
 
     await bot.set_webhook(WEBHOOK_URL)
-    await set_commands()
-    for admin_id in ADMIN_IDS:
-        await set_admin_commands(admin_id)
+    await setup_commands()
 
     asyncio.create_task(auto_reply_worker())
-    logging.info("✅ Webhook установлен, фоновые задачи запущены")
+    logging.info("✅ Webhook установлен, меню команд настроено, фоновые задачи запущены")
 
 
 def main():
