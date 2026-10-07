@@ -5,10 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Little Dreams — Поддержка</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="/webapp/style.css">
+    <link rel="stylesheet" href="/webapp/style.css?v=3">
 </head>
 <body>
-    <!-- Фоновые звёзды -->
     <div class="stars" id="stars"></div>
     <div class="dots" id="dots"></div>
 
@@ -23,7 +22,6 @@
     </div>
 
     <div class="menu">
-        <!-- Широкая кнопка на 2 колонки -->
         <div class="card wide" onclick="openWrite()">
             <div class="card-icon purple">📩</div>
             <div class="card-body">
@@ -97,7 +95,7 @@
             <h2>📩 Написать в поддержку</h2>
             <p>Опишите вопрос — оператор ответит в чате с ботом.</p>
             <textarea id="messageText" placeholder="Ваше сообщение..."></textarea>
-            <button class="btn" onclick="sendMessage()">🚀 Отправить</button>
+            <button class="btn" id="sendBtn" onclick="sendMessage()">🚀 Отправить</button>
             <button class="btn secondary" onclick="closeModal('writeModal')" style="margin-top:10px;">Отмена</button>
         </div>
     </div>
@@ -165,17 +163,26 @@
         tg.setHeaderColor?.('#0a0420');
         tg.setBackgroundColor?.('#0a0420');
 
-        // Данные пользователя
+        const initData = tg.initData || '';
+
         const user = tg.initDataUnsafe?.user || {};
-        document.getElementById('userName').textContent = user.first_name || 'Гость';
-        document.getElementById('userUsername').textContent = user.username ? '@' + user.username : '—';
+        document.getElementById('userName').textContent =
+            (user.first_name || 'Гость') + (user.last_name ? ' ' + user.last_name : '');
+        document.getElementById('userUsername').textContent =
+            user.username ? '@' + user.username : '—';
         document.getElementById('userId').textContent = user.id || '—';
 
-        // ===== Генерация звёзд =====
+        async function apiFetch(path, options = {}) {
+            const res = await fetch(path, {
+                ...options,
+                headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
+            });
+            return res.json();
+        }
+
         function createStars() {
             const stars = document.getElementById('stars');
-            const count = 12;
-            for (let i = 0; i < count; i++) {
+            for (let i = 0; i < 12; i++) {
                 const s = document.createElement('div');
                 s.className = 'star';
                 s.style.left = Math.random() * 100 + '%';
@@ -188,11 +195,9 @@
             }
         }
 
-        // ===== Фоновые мерцающие точки =====
         function createDots() {
             const dots = document.getElementById('dots');
-            const count = 40;
-            for (let i = 0; i < count; i++) {
+            for (let i = 0; i < 40; i++) {
                 const d = document.createElement('div');
                 d.className = 'dot';
                 d.style.left = Math.random() * 100 + '%';
@@ -209,7 +214,6 @@
         createStars();
         createDots();
 
-        // ===== Модалки =====
         function openModal(id) {
             document.getElementById(id).classList.add('active');
             tg.HapticFeedback?.impactOccurred('light');
@@ -227,31 +231,104 @@
 
         function openWrite() { openModal('writeModal'); }
 
-        // ===== Отправка сообщения =====
-        function sendMessage() {
-            const text = document.getElementById('messageText').value.trim();
+        async function sendMessage() {
+            const textarea = document.getElementById('messageText');
+            const btn = document.getElementById('sendBtn');
+            const text = textarea.value.trim();
+
             if (!text) {
                 showToast('Введите сообщение');
                 tg.HapticFeedback?.notificationOccurred('error');
                 return;
             }
-            tg.sendData(JSON.stringify({ action: 'message', text: text }));
-            tg.HapticFeedback?.notificationOccurred('success');
-            showToast('Отправлено ✨');
-            document.getElementById('messageText').value = '';
-            setTimeout(() => {
-                closeModal('writeModal');
-                tg.close();
-            }, 900);
+
+            btn.disabled = true;
+            btn.textContent = '⏳ Отправка...';
+
+            try {
+                const data = await apiFetch('/api/message', {
+                    method: 'POST',
+                    body: JSON.stringify({ initData, text })
+                });
+
+                if (data.ok) {
+                    tg.HapticFeedback?.notificationOccurred('success');
+                    showToast(`✅ Отправлено #${String(data.ticket_id).padStart(4, '0')}`);
+                    textarea.value = '';
+                    setTimeout(() => closeModal('writeModal'), 1200);
+                } else {
+                    tg.HapticFeedback?.notificationOccurred('error');
+                    const errors = {
+                        unauthorized: 'Откройте из Telegram',
+                        banned: 'Вы заблокированы',
+                        flood: 'Слишком часто',
+                        'empty text': 'Пустое сообщение'
+                    };
+                    showToast('⚠️ ' + (errors[data.error] || data.error || 'Ошибка'));
+                }
+            } catch (e) {
+                console.error(e);
+                tg.HapticFeedback?.notificationOccurred('error');
+                showToast('⚠️ Ошибка сети');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🚀 Отправить';
+            }
         }
 
-        // ===== Мои обращения =====
-        function openTickets() {
+        async function openTickets() {
             openModal('ticketsModal');
-            tg.sendData(JSON.stringify({ action: 'get_tickets' }));
+            const list = document.getElementById('ticketsList');
+            list.innerHTML = '<div class="loader"><div class="loader-spinner"></div>Загрузка…</div>';
+
+            try {
+                const data = await apiFetch(`/api/tickets?initData=${encodeURIComponent(initData)}`);
+
+                if (!data.ok) {
+                    list.innerHTML = `
+                        <div class="empty">
+                            <div class="empty-icon">🔒</div>
+                            <div>${data.error === 'unauthorized' ? 'Откройте из Telegram' : 'Ошибка'}</div>
+                        </div>`;
+                    return;
+                }
+
+                if (!data.tickets || data.tickets.length === 0) {
+                    list.innerHTML = `
+                        <div class="empty">
+                            <div class="empty-icon">📭</div>
+                            <div>У вас пока нет обращений</div>
+                        </div>`;
+                    return;
+                }
+
+                list.innerHTML = data.tickets.map(t => `
+                    <div class="ticket ${t.status === 'closed' ? 'closed' : ''}">
+                        <div class="ticket-header">
+                            <div class="ticket-id">#${String(t.id).padStart(4, '0')}</div>
+                            <div class="ticket-status ${t.status}">
+                                ${t.status === 'open' ? '🟢 открыто' : '🔴 закрыто'}
+                            </div>
+                        </div>
+                        <div class="ticket-msg">${escapeHtml(t.last_message)}</div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error(e);
+                list.innerHTML = `
+                    <div class="empty">
+                        <div class="empty-icon">⚠️</div>
+                        <div>Ошибка загрузки</div>
+                    </div>`;
+            }
         }
 
-        // ===== Toast =====
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
         function showToast(msg) {
             const t = document.getElementById('toast');
             t.textContent = msg;
