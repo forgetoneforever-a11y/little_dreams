@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Little Dreams — Поддержка</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg: var(--tg-theme-bg-color, #0f0f14);
+            --bg2: var(--tg-theme-secondary-bg-color, #1a1a22);
+            --text: var(--tg-theme-text-color, #ffffff);
+            --hint: var(--tg-theme-hint-color, #8b8b9a);
+            --link: var(--tg-theme-link-color, #a78bfa);
+            --btn: var(--tg-theme-button-color, #8b5cf6);
+            --btn_text: var(--tg-theme-button-text-color, #ffffff);
+            --accent: #a78bfa;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 20px 16px 100px;
+            transition: background 0.2s;
+        }
+
+        /* Шапка */
+        .header {
+            text-align: center;
+            padding: 24px 0 28px;
+        }
+
+        .avatar {
+            width: 88px;
+            height: 88px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #a78bfa 0%, #7c3aed 50%, #ec4899 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 42px;
+            margin: 0 auto 16px;
+            box-shadow: 0 8px 32px rgba(167, 139, 250, 0.35);
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-6px); }
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 6px;
+            letter-spacing: -0.5px;
+        }
+
+        .subtitle {
+            color: var(--hint);
+            font-size: 14px;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(34, 197, 94, 0.15);
+            color: #4ade80;
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            margin-top: 12px;
+            font-weight: 500;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4ade80;
+            box-shadow: 0 0 8px #4ade80;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* Карточки меню */
+        .menu {
+            display: grid;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        .card {
+            background: var(--bg2);
+            border-radius: 18px;
+            padding: 18px 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            cursor: pointer;
+            transition: transform 0.15s, background 0.2s;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            user-select: none;
+        }
+
+        .card:active {
+            transform: scale(0.97);
+            background: rgba(167, 139, 250, 0.1);
+        }
+
+        .card-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+
+        .card-icon.purple { background: rgba(167, 139, 250, 0.18); }
+        .card-icon.pink { background: rgba(236, 72, 153, 0.18); }
+        .card-icon.blue { background: rgba(59, 130, 246, 0.18); }
+        .card-icon.green { background: rgba(34, 197, 94, 0.18); }
+        .card-icon.orange { background: rgba(251, 146, 60, 0.18); }
+
+        .card-text { flex: 1; min-width: 0; }
+
+        .card-title {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 3px;
+        }
+
+        .card-desc {
+            font-size: 13px;
+            color: var(--hint);
+            line-height: 1.3;
+        }
+
+        .card-arrow {
+            color: var(--hint);
+            font-size: 20px;
+            opacity: 0.5;
+        }
+
+        /* Профиль */
+        .profile {
+            background: var(--bg2);
+            border-radius: 18px;
+            padding: 20px;
+            margin-top: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        .profile-title {
+            font-size: 12px;
+            color: var(--hint);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 14px;
+            font-weight: 600;
+        }
+
+        .profile-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 14px;
+        }
+
+        .profile-row + .profile-row {
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .profile-label { color: var(--hint); }
+        .profile-value { font-weight: 500; text-align: right; }
+
+        /* Модальное окно */
+        .modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            display: none;
+            align-items: flex-end;
+            z-index: 100;
+            padding: 0;
+        }
+
+        .modal.active { display: flex; animation: fadeIn 0.2s; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-content {
+            background: var(--bg2);
+            border-radius: 24px 24px 0 0;
+            padding: 24px 20px 32px;
+            width: 100%;
+            max-height: 80vh;
+            overflow-y: auto;
+            animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+
+        .modal-handle {
+            width: 40px;
+            height: 4px;
+            background: var(--hint);
+            border-radius: 2px;
+            margin: 0 auto 20px;
+            opacity: 0.4;
+        }
+
+        .modal h2 {
+            font-size: 20px;
+            margin-bottom: 16px;
+            font-weight: 700;
+        }
+
+        .modal p {
+            color: var(--hint);
+            font-size: 15px;
+            line-height: 1.6;
+            margin-bottom: 12px;
+        }
+
+        .modal p strong { color: var(--text); }
+
+        .modal textarea {
+            width: 100%;
+            background: var(--bg);
+            color: var(--text);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 14px;
+            padding: 14px;
+            font-size: 15px;
+            font-family: inherit;
+            resize: none;
+            min-height: 100px;
+            margin-bottom: 14px;
+        }
+
+        .modal textarea:focus { outline: none; border-color: var(--accent); }
+
+        .btn {
+            width: 100%;
+            background: var(--btn);
+            color: var(--btn_text);
+            border: none;
+            border-radius: 14px;
+            padding: 15px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            font-family: inherit;
+        }
+
+        .btn:active { opacity: 0.8; }
+        .btn.secondary { background: var(--bg); color: var(--text); border: 1px solid rgba(255, 255, 255, 0.1); }
+
+        /* Список тикетов */
+        .ticket {
+            background: var(--bg);
+            border-radius: 14px;
+            padding: 14px;
+            margin-bottom: 10px;
+            border-left: 3px solid var(--accent);
+        }
+
+        .ticket.closed { border-left-color: var(--hint); opacity: 0.7; }
+
+        .ticket-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .ticket-id { font-weight: 700; font-size: 14px; color: var(--accent); }
+        .ticket-status { font-size: 12px; padding: 3px 8px; border-radius: 6px; }
+        .ticket-status.open { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
+        .ticket-status.closed { background: rgba(139, 139, 154, 0.15); color: var(--hint); }
+
+        .ticket-msg { font-size: 14px; color: var(--text); opacity: 0.85; line-height: 1.4; }
+
+        .empty {
+            text-align: center;
+            padding: 30px 20px;
+            color: var(--hint);
+            font-size: 14px;
+        }
+
+        .empty-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.5; }
+
+        /* Лоадер */
+        .loader {
+            text-align: center;
+            padding: 20px;
+            color: var(--hint);
+        }
+
+        .loader-spinner {
+            width: 28px;
+            height: 28px;
+            border: 3px solid var(--bg);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 12px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: var(--bg2);
+            color: var(--text);
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-size: 14px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            z-index: 200;
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .toast.show { transform: translateX(-50%) translateY(0); }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="avatar">💭</div>
+        <h1>Little Dreams</h1>
+        <div class="subtitle">Служба поддержки</div>
+        <div class="status-badge">
+            <span class="status-dot"></span>
+            Онлайн
+        </div>
+    </div>
+
+    <div class="menu">
+        <div class="card" onclick="openWrite()">
+            <div class="card-icon purple">📩</div>
+            <div class="card-text">
+                <div class="card-title">Написать в поддержку</div>
+                <div class="card-desc">Ответим в течение дня</div>
+            </div>
+            <div class="card-arrow">›</div>
+        </div>
+
+        <div class="card" onclick="openTickets()">
+            <div class="card-icon blue">📚</div>
+            <div class="card-text">
+                <div class="card-title">Мои обращения</div>
+                <div class="card-desc">История и статусы</div>
+            </div>
+            <div class="card-arrow">›</div>
+        </div>
+
+        <div class="card" onclick="openModal('rulesModal')">
+            <div class="card-icon green">📜</div>
+            <div class="card-text">
+                <div class="card-title">Правила</div>
+                <div class="card-desc">Как мы работаем</div>
+            </div>
+            <div class="card-arrow">›</div>
+        </div>
+
+        <div class="card" onclick="openModal('faqModal')">
+            <div class="card-icon orange">❓</div>
+            <div class="card-text">
+                <div class="card-title">FAQ</div>
+                <div class="card-desc">Частые вопросы</div>
+            </div>
+            <div class="card-arrow">›</div>
+        </div>
+    </div>
+
+    <div class="profile">
+        <div class="profile-title">Профиль</div>
+        <div class="profile-row">
+            <span class="profile-label">Имя</span>
+            <span class="profile-value" id="userName">—</span>
+        </div>
+        <div class="profile-row">
+            <span class="profile-label">Username</span>
+            <span class="profile-value" id="userUsername">—</span>
+        </div>
+        <div class="profile-row">
+            <span class="profile-label">ID</span>
+            <span class="profile-value" id="userId">—</span>
+        </div>
+    </div>
+
+    <!-- Модалка «Написать» -->
+    <div class="modal" id="writeModal" onclick="closeOnBg(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-handle"></div>
+            <h2>📩 Написать в поддержку</h2>
+            <p>Опишите вопрос — оператор ответит в чате с ботом.</p>
+            <textarea id="messageText" placeholder="Ваше сообщение..."></textarea>
+            <button class="btn" onclick="sendMessage()">Отправить</button>
+            <button class="btn secondary" onclick="closeModal('writeModal')" style="margin-top:8px;">Отмена</button>
+        </div>
+    </div>
+
+    <!-- Модалка «Мои обращения» -->
+    <div class="modal" id="ticketsModal" onclick="closeOnBg(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-handle"></div>
+            <h2>📚 Мои обращения</h2>
+            <div id="ticketsList">
+                <div class="loader"><div class="loader-spinner"></div>Загрузка…</div>
+            </div>
+            <button class="btn secondary" onclick="closeModal('ticketsModal')" style="margin-top:14px;">Закрыть</button>
+        </div>
+    </div>
+
+    <!-- Модалка «Правила» -->
+    <div class="modal" id="rulesModal" onclick="closeOnBg(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-handle"></div>
+            <h2>📜 Правила</h2>
+            <p><strong>1. Уважение.</strong> Общаемся вежливо — без оскорблений, мата и агрессии.</p>
+            <p><strong>2. По делу.</strong> Один вопрос — одно обращение. Не дублируйте сообщения.</p>
+            <p><strong>3. Без спама.</strong> Массовые рассылки, реклама и флуд запрещены.</p>
+            <p><strong>4. Терпение.</strong> Оператор отвечает в порядке очереди. Обычно — в течение дня.</p>
+            <p><strong>5. Без личных данных.</strong> Не отправляйте пароли, коды из SMS и данные карт.</p>
+            <p><strong>6. График работы.</strong> Пн–Пт, 10:00–19:00 (МСК). В выходные отвечаем реже.</p>
+            <p><strong>7. Нарушение правил</strong> → предупреждение, затем блокировка.</p>
+            <button class="btn" onclick="closeModal('rulesModal')" style="margin-top:14px;">Понятно</button>
+        </div>
+    </div>
+
+    <!-- Модалка «FAQ» -->
+    <div class="modal" id="faqModal" onclick="closeOnBg(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-handle"></div>
+            <h2>❓ Частые вопросы</h2>
+            <p><strong>💰 Цены</strong><br>Актуальные цены смотрите на сайте. Уточните товар — подскажем точнее.</p>
+            <p><strong>🚚 Доставка</strong><br>По всей России, 2–7 рабочих дней. Самовывоз — по договорённости.</p>
+            <p><strong>💳 Оплата</strong><br>Картой, СБП и переводом. Чек приходит на почту.</p>
+            <p><strong>🛡 Гарантия</strong><br>12 месяцев. При браке — заменим или вернём деньги.</p>
+            <p><strong>↩️ Возврат</strong><br>14 дней, если товар не использовался и упаковка сохранена.</p>
+            <button class="btn" onclick="closeModal('faqModal')" style="margin-top:14px;">Понятно</button>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
+
+        // Данные пользователя
+        const user = tg.initDataUnsafe?.user || {};
+        document.getElementById('userName').textContent = user.first_name || 'Гость';
+        document.getElementById('userUsername').textContent = user.username ? '@' + user.username : '—';
+        document.getElementById('userId').textContent = user.id || '—';
+
+        // Модалки
+        function openModal(id) {
+            document.getElementById(id).classList.add('active');
+            tg.HapticFeedback?.impactOccurred('light');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+
+        function closeOnBg(e) {
+            if (e.target.classList.contains('modal')) {
+                e.target.classList.remove('active');
+            }
+        }
+
+        function openWrite() { openModal('writeModal'); }
+
+        // Отправка сообщения
+        function sendMessage() {
+            const text = document.getElementById('messageText').value.trim();
+            if (!text) {
+                showToast('Введите сообщение');
+                return;
+            }
+            tg.sendData(JSON.stringify({ action: 'message', text: text }));
+            tg.HapticFeedback?.notificationOccurred('success');
+            showToast('Отправлено ✅');
+            document.getElementById('messageText').value = '';
+            setTimeout(() => { closeModal('writeModal'); tg.close(); }, 800);
+        }
+
+        // Мои обращения
+        function openTickets() {
+            openModal('ticketsModal');
+            tg.sendData(JSON.stringify({ action: 'get_tickets' }));
+        }
+
+        // Приём данных из бота
+        tg.onEvent('viewportChanged', () => {});
+
+        // Функция для отображения тикетов (бот пришлёт через sendData? нет — через query)
+        // Альтернатива: запрос через fetch к API (если сделать endpoint в bot.py)
+
+        // Toast
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 2000);
+        }
+    </script>
+</body>
+</html>
