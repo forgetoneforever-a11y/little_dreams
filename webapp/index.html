@@ -8,6 +8,10 @@
     <link rel="stylesheet" href="/webapp/style.css">
 </head>
 <body>
+    <!-- Фоновые звёзды -->
+    <div class="stars" id="stars"></div>
+    <div class="dots" id="dots"></div>
+
     <div class="header">
         <div class="avatar">💭</div>
         <h1>Little Dreams</h1>
@@ -19,9 +23,10 @@
     </div>
 
     <div class="menu">
-        <div class="card" onclick="openWrite()">
+        <!-- Широкая кнопка на 2 колонки -->
+        <div class="card wide" onclick="openWrite()">
             <div class="card-icon purple">📩</div>
-            <div class="card-text">
+            <div class="card-body">
                 <div class="card-title">Написать в поддержку</div>
                 <div class="card-desc">Ответим в течение дня</div>
             </div>
@@ -29,30 +34,39 @@
         </div>
 
         <div class="card" onclick="openTickets()">
+            <div class="card-arrow">›</div>
             <div class="card-icon blue">📚</div>
-            <div class="card-text">
+            <div class="card-body">
                 <div class="card-title">Мои обращения</div>
                 <div class="card-desc">История и статусы</div>
             </div>
-            <div class="card-arrow">›</div>
         </div>
 
         <div class="card" onclick="openModal('rulesModal')">
+            <div class="card-arrow">›</div>
             <div class="card-icon green">📜</div>
-            <div class="card-text">
+            <div class="card-body">
                 <div class="card-title">Правила</div>
                 <div class="card-desc">Как мы работаем</div>
             </div>
-            <div class="card-arrow">›</div>
         </div>
 
         <div class="card" onclick="openModal('faqModal')">
+            <div class="card-arrow">›</div>
             <div class="card-icon orange">❓</div>
-            <div class="card-text">
+            <div class="card-body">
                 <div class="card-title">FAQ</div>
                 <div class="card-desc">Частые вопросы</div>
             </div>
+        </div>
+
+        <div class="card" onclick="openModal('contactsModal')">
             <div class="card-arrow">›</div>
+            <div class="card-icon cyan">📞</div>
+            <div class="card-body">
+                <div class="card-title">Контакты</div>
+                <div class="card-desc">Связь с нами</div>
+            </div>
         </div>
     </div>
 
@@ -72,6 +86,10 @@
         </div>
     </div>
 
+    <div class="footer">
+        © Little Dreams · 2026
+    </div>
+
     <!-- Модалка «Написать» -->
     <div class="modal" id="writeModal" onclick="closeOnBg(event)">
         <div class="modal-content" onclick="event.stopPropagation()">
@@ -79,8 +97,8 @@
             <h2>📩 Написать в поддержку</h2>
             <p>Опишите вопрос — оператор ответит в чате с ботом.</p>
             <textarea id="messageText" placeholder="Ваше сообщение..."></textarea>
-            <button class="btn" onclick="sendMessage()">Отправить</button>
-            <button class="btn secondary" onclick="closeModal('writeModal')" style="margin-top:8px;">Отмена</button>
+            <button class="btn" onclick="sendMessage()">🚀 Отправить</button>
+            <button class="btn secondary" onclick="closeModal('writeModal')" style="margin-top:10px;">Отмена</button>
         </div>
     </div>
 
@@ -108,7 +126,7 @@
             <p><strong>5. Без личных данных.</strong> Не отправляйте пароли, коды из SMS и данные карт.</p>
             <p><strong>6. График работы.</strong> Пн–Пт, 10:00–19:00 (МСК). В выходные отвечаем реже.</p>
             <p><strong>7. Нарушение правил</strong> → предупреждение, затем блокировка.</p>
-            <button class="btn" onclick="closeModal('rulesModal')" style="margin-top:14px;">Понятно</button>
+            <button class="btn" onclick="closeModal('rulesModal')" style="margin-top:14px;">Понятно ✨</button>
         </div>
     </div>
 
@@ -122,7 +140,19 @@
             <p><strong>💳 Оплата</strong><br>Картой, СБП и переводом. Чек приходит на почту.</p>
             <p><strong>🛡 Гарантия</strong><br>12 месяцев. При браке — заменим или вернём деньги.</p>
             <p><strong>↩️ Возврат</strong><br>14 дней, если товар не использовался и упаковка сохранена.</p>
-            <button class="btn" onclick="closeModal('faqModal')" style="margin-top:14px;">Понятно</button>
+            <button class="btn" onclick="closeModal('faqModal')" style="margin-top:14px;">Понятно ✨</button>
+        </div>
+    </div>
+
+    <!-- Модалка «Контакты» -->
+    <div class="modal" id="contactsModal" onclick="closeOnBg(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-handle"></div>
+            <h2>📞 Контакты</h2>
+            <p><strong>💬 Telegram-канал</strong><br>@little_dreams_channel</p>
+            <p><strong>📧 Email</strong><br>support@littledreams.example</p>
+            <p><strong>🕐 График</strong><br>Пн–Пт, 10:00–19:00 (МСК)</p>
+            <button class="btn" onclick="closeModal('contactsModal')" style="margin-top:14px;">Понятно ✨</button>
         </div>
     </div>
 
@@ -132,53 +162,21 @@
         const tg = window.Telegram.WebApp;
         tg.ready();
         tg.expand();
+        tg.setHeaderColor?.('#0a0420');
+        tg.setBackgroundColor?.('#0a0420');
 
+        // Данные пользователя
         const user = tg.initDataUnsafe?.user || {};
         document.getElementById('userName').textContent = user.first_name || 'Гость';
         document.getElementById('userUsername').textContent = user.username ? '@' + user.username : '—';
         document.getElementById('userId').textContent = user.id || '—';
 
-        function openModal(id) {
-            document.getElementById(id).classList.add('active');
-            tg.HapticFeedback?.impactOccurred('light');
-        }
-
-        function closeModal(id) {
-            document.getElementById(id).classList.remove('active');
-        }
-
-        function closeOnBg(e) {
-            if (e.target.classList.contains('modal')) {
-                e.target.classList.remove('active');
-            }
-        }
-
-        function openWrite() { openModal('writeModal'); }
-
-        function sendMessage() {
-            const text = document.getElementById('messageText').value.trim();
-            if (!text) {
-                showToast('Введите сообщение');
-                return;
-            }
-            tg.sendData(JSON.stringify({ action: 'message', text: text }));
-            tg.HapticFeedback?.notificationOccurred('success');
-            showToast('Отправлено ✅');
-            document.getElementById('messageText').value = '';
-            setTimeout(() => { closeModal('writeModal'); tg.close(); }, 800);
-        }
-
-        function openTickets() {
-            openModal('ticketsModal');
-            tg.sendData(JSON.stringify({ action: 'get_tickets' }));
-        }
-
-        function showToast(msg) {
-            const t = document.getElementById('toast');
-            t.textContent = msg;
-            t.classList.add('show');
-            setTimeout(() => t.classList.remove('show'), 2000);
-        }
-    </script>
-</body>
-</html>
+        // ===== Генерация звёзд =====
+        function createStars() {
+            const stars = document.getElementById('stars');
+            const count = 12;
+            for (let i = 0; i < count; i++) {
+                const s = document.createElement('div');
+                s.className = 'star';
+                s.style.left = Math.random() * 100 + '%';
+                s.style.animationDuration = (3 + Math.random
