@@ -39,6 +39,14 @@ def init_db():
             first_seen TEXT,
             last_seen TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS bans (
+            user_id INTEGER PRIMARY KEY,
+            reason TEXT,
+            banned_at TEXT,
+            banned_by INTEGER,
+            type TEXT DEFAULT 'ban'
+        );
         """)
 
 
@@ -46,6 +54,7 @@ def _now():
     return datetime.utcnow().isoformat()
 
 
+# ===== USERS =====
 def upsert_user(user_id: int, username: str, full_name: str):
     with _conn() as conn:
         conn.execute("""
@@ -63,6 +72,7 @@ def all_user_ids():
         return [r["user_id"] for r in conn.execute("SELECT user_id FROM users").fetchall()]
 
 
+# ===== TICKETS =====
 def get_open_ticket(user_id: int):
     with _conn() as conn:
         row = conn.execute("""
@@ -125,6 +135,7 @@ def add_message(ticket_id: int, from_user_id: int, text: str, is_admin: bool = F
         """, (ticket_id, from_user_id, 1 if is_admin else 0, text, _now()))
 
 
+# ===== STATS =====
 def get_stats():
     with _conn() as conn:
         total = conn.execute("SELECT COUNT(*) c FROM tickets").fetchone()["c"]
@@ -170,3 +181,53 @@ def get_stats():
         "avg_minutes": avg_minutes,
         "top_users": [dict(u) for u in top_users],
     }
+
+
+# ===== BANS & MUTES =====
+def ban_user(user_id: int, reason: str, banned_by: int, kind: str = "ban"):
+    """kind = 'ban' (навсегда) или 'mute' (время в reason как ISO)."""
+    with _conn() as conn:
+        conn.execute("""
+            INSERT INTO bans (user_id, reason, banned_at, banned_by, type)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                reason=excluded.reason,
+                banned_at=excluded.banned_at,
+                banned_by=excluded.banned_by,
+                type=excluded.type
+        """, (user_id, reason, _now(), banned_by, kind))
+
+
+def unban_user(user_id: int):
+    with _conn() as conn:
+        conn.execute("DELETE FROM bans WHERE user_id=?", (user_id,))
+
+
+def get_ban(user_id: int):
+    with _conn() as conn:
+        row = conn.execute("SELECT * FROM bans WHERE user_id=?", (user_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def list_bans():
+    with _conn() as conn:
+        rows = conn.execute("SELECT * FROM bans ORDER BY banned_at DESC").fetchall()
+        return [dict(r) for r in rows]
+
+
+def is_banned(user_id: int) -> bool:
+    b = get_ban(user_id)
+    if not b:
+        return False
+    if b["type"] == "ban":
+        return True
+    # mute — проверяем время
+    try:
+        until = datetime.fromisoformat(b["reason"])
+        if datetime.utcnow() < until:
+            return True
+        # время вышло — снимаем автоматически
+        unban_user(user_id)
+        return False
+    except Exception:
+        return False
