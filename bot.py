@@ -1,8 +1,11 @@
 import asyncio
+import hashlib
+import hmac
 import json
 import logging
 import os
 from datetime import datetime, timedelta
+from urllib.parse import parse_qsl
 
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
@@ -168,25 +171,23 @@ async def cb_whoami(call: CallbackQuery):
     await call.answer()
 
 
-# ================== WEBAPP DATA ==================
+# ================== WEBAPP DATA (fallback) ==================
 
 @dp.message(F.web_app_data)
 async def webapp_data(message: types.Message):
+    """Fallback: если WebApp прислал данные через tg.sendData()."""
     try:
         data = json.loads(message.web_app_data.data)
     except Exception as e:
         logging.warning(f"WebApp: ошибка парсинга: {e}")
-        await message.answer("⚠️ Ошибка данных из приложения.")
         return
 
     action = data.get("action")
     user = message.from_user
 
-    # --- Отправка сообщения из WebApp ---
     if action == "message":
         text = (data.get("text") or "").strip()
         if not text:
-            await message.answer("⚠️ Пустое сообщение.")
             return
 
         if db.is_banned(user.id):
@@ -204,56 +205,179 @@ async def webapp_data(message: types.Message):
         db.add_message(ticket_id, user.id, text, is_admin=False)
         awaiting_reply[ticket_id] = datetime.utcnow().timestamp()
 
-        faq_answer = match_faq(text)
-        if faq_answer:
-            await message.answer(f"🤖 <b>Быстрый ответ:</b>\n\n{faq_answer}")
-            await asyncio.sleep(0.5)
-
         header = (
-            f"📩 <b>Обращение #{ticket_id:04d}</b> <i>(из WebApp)</i>\n"
+            f"📩 <b>Обращение #{ticket_id:04d}</b> <i>(WebApp)</i>\n"
             f"👤 {user.full_name} (@{user.username or '—'})\n"
             f"🆔 <code>{user.id}</code>\n"
             f"———\n{text}\n\n"
-            f"↩️ Reply или /reply {ticket_id} &lt;текст&gt;\n"
-            f"/close {ticket_id} — закрыть"
+            f"↩️ Reply или /reply {ticket_id} &lt;текст&gt;"
         )
-
-        delivered = False
         for admin_id in ADMIN_IDS:
             try:
                 sent = await bot.send_message(admin_id, header)
                 pending[sent.message_id] = ticket_id
-                delivered = True
             except Exception as e:
                 logging.warning(f"WebApp → админ {admin_id}: {e}")
 
-        if delivered:
-            await message.answer(
-                f"✅ Отправлено из приложения.\nНомер обращения: <b>#{ticket_id:04d}</b>"
-            )
-        else:
-            await message.answer("⚠️ Не удалось доставить обращение.")
+        await message.answer(
+            f"✅ Отправлено из приложения.\nОбращение: <b>#{ticket_id:04d}</b>"
+        )
 
-    # --- Запрос тикетов из WebApp ---
-    elif action == "get_tickets":
-        tickets = db.get_user_tickets(user.id, limit=10)
-        if not tickets:
-            await message.answer("📭 У вас пока нет обращений.")
-        else:
-            lines = ["📚 <b>Ваши обращения:</b>\n"]
-            for t in tickets:
-                st = "🟢" if t["status"] == "open" else "🔴"
-                lines.append(
-                    f"{st} <b>#{t['id']:04d}</b> — {(t['last_message'] or '')[:60]}"
-                )
-            await message.answer("\n".join(lines))
 
-    # --- Открытие правил / FAQ из WebApp (на будущее) ---
-    elif action == "rules":
-        await message.answer(RULES_TEXT)
+# ================== WEBAPP API ==================
 
+def validate_init_data(init_data: str) -> dict | None:
+    """Проверяет подпись initData от Telegram. Возвращает user dict или None."""
+    if not init_data:
+        return None
+    try:
+        parsed = dict(parse_qsl(init_data, keep_blank_values=True))
+        received_hash = parsed.pop("hash", "")
+        if not received_hash:
+            return None
+
+        data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(parsed.items()))
+        secret_key = hmac.new(
+            b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256
+        ).digest()
+        computed_hash = hmac.new(
+            secret_key, data_check_string.encode(), hashlib.sha256
+        ).hexdigest()
+
+        if not hmac.compare_digest(computed_hash, received_hash):
+            logging.warning("WebApp: неверная подпись initData")
+            return None
+
+        user_data = json.loads(parsed.get("user", "{}"))
+        if not user_data.get("id"):
+            return None
+        return user_data
+    except Exception as e:
+        logging.warning(f"WebApp validate error: {e}")
+        return None
+
+
+async def api_profile(request):
+    """GET /api/profile?initData=..."""
+    init_data = request.query.get("initData", "")
+    user = validate_init_data(init_data)
+    if not user:
+        return web.json_response({"ok": False, "error": "unauthorized"}, status=401)
+
+    db.upsert_user(
+        user["id"],
+        user.get("username", "") or "",
+        (user.get("first_name", "") + " " + user.get("last_name", "")).strip()
+    )
+    return web.json_response({
+        "ok": True,
+        "user": {
+            "id": user["id"],
+            "first_name": user.get("first_name", ""),
+            "username": user.get("username", ""),
+        }
+    })
+
+
+async def api_tickets(request):
+    """GET /api/tickets?initData=..."""
+    init_data = request.query.get("initData", "")
+    user = validate_init_data(init_data)
+    if not user:
+        return web.json_response({"ok": False, "error": "unauthorized"}, status=401)
+
+    tickets = db.get_user_tickets(user["id"], limit=10)
+    return web.json_response({
+        "ok": True,
+        "tickets": [
+            {
+                "id": t["id"],
+                "status": t["status"],
+                "last_message": t["last_message"] or "",
+                "last_activity": (t["last_activity"] or "")[:16],
+            }
+            for t in tickets
+        ]
+    })
+
+
+async def api_message(request):
+    """POST /api/message. Body: {initData, text}."""
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "bad json"}, status=400)
+
+    init_data = body.get("initData", "")
+    text = (body.get("text") or "").strip()
+    if not text:
+        return web.json_response({"ok": False, "error": "empty text"}, status=400)
+
+    user = validate_init_data(init_data)
+    if not user:
+        return web.json_response({"ok": False, "error": "unauthorized"}, status=401)
+
+    user_id = user["id"]
+    username = user.get("username", "") or ""
+    full_name = (user.get("first_name", "") + " " + user.get("last_name", "")).strip()
+
+    if db.is_banned(user_id):
+        return web.json_response({"ok": False, "error": "banned"}, status=403)
+
+    if is_flooding(user_id):
+        return web.json_response({"ok": False, "error": "flood"}, status=429)
+
+    db.upsert_user(user_id, username, full_name)
+
+    ticket = db.get_open_ticket(user_id)
+    if ticket:
+        ticket_id = ticket["id"]
+        db.update_ticket_activity(ticket_id, text)
     else:
-        logging.info(f"WebApp: неизвестное действие {action}")
+        ticket_id = db.create_ticket(user_id, username, full_name, text)
+
+    db.add_message(ticket_id, user_id, text, is_admin=False)
+    awaiting_reply[ticket_id] = datetime.utcnow().timestamp()
+
+    faq_answer = match_faq(text)
+
+    header = (
+        f"📩 <b>Обращение #{ticket_id:04d}</b> <i>(из WebApp)</i>\n"
+        f"👤 {full_name} (@{username or '—'})\n"
+        f"🆔 <code>{user_id}</code>\n"
+        f"———\n{text}\n\n"
+        f"↩️ Reply или /reply {ticket_id} &lt;текст&gt;\n"
+        f"/close {ticket_id} — закрыть"
+    )
+
+    delivered = False
+    for admin_id in ADMIN_IDS:
+        try:
+            sent = await bot.send_message(admin_id, header)
+            pending[sent.message_id] = ticket_id
+            delivered = True
+        except Exception as e:
+            logging.warning(f"WebApp API → админ {admin_id}: {e}")
+
+    # Уведомляем пользователя в чате
+    try:
+        if faq_answer:
+            await bot.send_message(
+                user_id, f"🤖 <b>Быстрый ответ:</b>\n\n{faq_answer}"
+            )
+        await bot.send_message(
+            user_id,
+            f"✅ Сообщение отправлено из приложения.\nОбращение: <b>#{ticket_id:04d}</b>"
+        )
+    except Exception as e:
+        logging.warning(f"WebApp API → пользователь {user_id}: {e}")
+
+    return web.json_response({
+        "ok": True,
+        "ticket_id": ticket_id,
+        "faq": faq_answer,
+        "delivered": delivered,
+    })
 
 
 # ================== СООБЩЕНИЯ ОТ ПОЛЬЗОВАТЕЛЕЙ ==================
@@ -684,7 +808,6 @@ ADMIN_COMMANDS = [
 
 
 async def setup_commands():
-    """Меню команд: разные для пользователя и админа + кнопка Меню слева."""
     try:
         await bot.set_my_commands(USER_COMMANDS, scope=BotCommandScopeDefault())
     except Exception as e:
@@ -693,13 +816,11 @@ async def setup_commands():
     for admin_id in ADMIN_IDS:
         try:
             await bot.set_my_commands(
-                ADMIN_COMMANDS,
-                scope=BotCommandScopeChat(chat_id=admin_id)
+                ADMIN_COMMANDS, scope=BotCommandScopeChat(chat_id=admin_id)
             )
         except Exception as e:
             logging.warning(f"set_my_commands admin {admin_id}: {e}")
 
-    # Кнопка «Меню» слева от поля ввода
     try:
         await bot.set_chat_menu_button(
             menu_button=MenuButtonCommands(type="commands")
@@ -720,17 +841,14 @@ async def setup_commands():
 # ================== WEBAPP — ОТДАЧА ФАЙЛОВ ==================
 
 async def serve_webapp(request):
-    """Отдаёт index.html мини-приложения."""
     filepath = os.path.join(WEBAPP_DIR, "index.html")
     if not os.path.exists(filepath):
-        return web.Response(status=404, text="WebApp not found")
+        return web.Response(status=404, text="index.html not found")
     return web.FileResponse(filepath)
 
 
 async def serve_webapp_file(request):
-    """Отдаёт статику WebApp (css, js, img)."""
     filename = request.match_info.get("filename", "")
-    # Защита от path traversal
     filepath = os.path.join(WEBAPP_DIR, filename)
     if not os.path.abspath(filepath).startswith(os.path.abspath(WEBAPP_DIR)):
         return web.Response(status=403, text="Forbidden")
@@ -751,7 +869,7 @@ async def on_startup(bot: Bot):
     await setup_commands()
 
     asyncio.create_task(auto_reply_worker())
-    logging.info("✅ Webhook + меню + WebApp-роуты готовы")
+    logging.info("✅ Webhook + меню + WebApp + API готовы")
 
 
 def main():
@@ -765,6 +883,11 @@ def main():
     app.router.add_get("/webapp", serve_webapp)
     app.router.add_get("/webapp/", serve_webapp)
     app.router.add_get("/webapp/{filename}", serve_webapp_file)
+
+    # API для WebApp
+    app.router.add_get("/api/profile", api_profile)
+    app.router.add_get("/api/tickets", api_tickets)
+    app.router.add_post("/api/message", api_message)
 
     setup_application(app, dp, bot=bot)
     web.run_app(app, host="0.0.0.0", port=PORT)
