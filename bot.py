@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
@@ -14,7 +14,8 @@ from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_applicati
 
 from config import (
     BOT_TOKEN, ADMIN_IDS, WEBHOOK_URL, WEBHOOK_PATH, PORT,
-    AUTO_REPLY_MINUTES, ANTIFLOOD_LIMIT, ANTIFLOOD_WINDOW, ANTIFLOOD_MUTE
+    AUTO_REPLY_MINUTES, ANTIFLOOD_LIMIT, ANTIFLOOD_WINDOW, ANTIFLOOD_MUTE,
+    ANTIFLOOD_STRIKES_TO_BAN, RULES_TEXT
 )
 import database as db
 from faq import match_faq
@@ -27,8 +28,9 @@ dp = Dispatcher()
 # ===== Состояние в памяти =====
 flood: dict[int, list[float]] = {}
 muted_until: dict[int, float] = {}
-pending: dict[int, int] = {}          # message_id_у_админа -> ticket_id
-awaiting_reply: dict[int, float] = {} # ticket_id -> timestamp первого сообщения
+strikes: dict[int, int] = {}          # сколько раз попался на флуде
+pending: dict[int, int] = {}
+awaiting_reply: dict[int, float] = {}
 
 
 def is_admin(user_id: int) -> bool:
@@ -45,6 +47,7 @@ def is_flooding(user_id: int) -> bool:
     flood[user_id] = times
     if len(times) > ANTIFLOOD_LIMIT:
         muted_until[user_id] = now + ANTIFLOOD_MUTE
+        strikes[user_id] = strikes.get(user_id, 0) + 1
         return True
     return False
 
@@ -53,9 +56,14 @@ def is_flooding(user_id: int) -> bool:
 
 @dp.message(CommandStart(), ~F.from_user.id.in_(ADMIN_IDS))
 async def user_start(message: types.Message):
+    if db.is_banned(message.from_user.id):
+        await message.answer("🚫 Вы заблокированы в этом боте.")
+        return
+
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📩 Написать в поддержку", callback_data="write_support")],
         [InlineKeyboardButton(text="📚 Мои обращения", callback_data="my_tickets")],
+        [InlineKeyboardButton(text="📜 Правила", callback_data="rules")],
         [InlineKeyboardButton(text="👤 Мой ID", callback_data="whoami")],
     ])
     await message.answer(
@@ -70,14 +78,19 @@ async def user_start(message: types.Message):
 async def admin_start(message: types.Message):
     await message.answer(
         "👋 <b>Режим администратора</b>\n\n"
-        "Вам приходят сообщения пользователей.\n\n"
         "📌 <b>Команды:</b>\n"
         "/tickets — открытые обращения\n"
         "/reply &lt;id&gt; &lt;текст&gt; — ответить\n"
         "/close &lt;id&gt; — закрыть обращение\n"
         "/stats — статистика\n"
-        "/broadcast &lt;текст&gt; — рассылка\n\n"
-        "💡 Или просто <b>Reply</b> на пересланное сообщение."
+        "/broadcast &lt;текст&gt; — рассылка\n"
+        "/ban &lt;id&gt; [причина] — забанить\n"
+        "/unban &lt;id&gt; — разбанить\n"
+        "/mute &lt;id&gt; &lt;минуты&gt; — тайм-аут\n"
+        "/unmute &lt;id&gt; — снять тайм-аут\n"
+        "/banned — список забаненных\n"
+        "/rules — правила\n\n"
+        "💡 Или <b>Reply</b> на пересланное сообщение."
     )
 
 
@@ -86,18 +99,23 @@ async def help_cmd(message: types.Message):
     if is_admin(message.from_user.id):
         await message.answer(
             "📌 <b>Команды админа:</b>\n"
-            "/tickets — список открытых\n"
-            "/reply &lt;id&gt; &lt;текст&gt;\n"
-            "/close &lt;id&gt;\n"
-            "/stats\n"
-            "/broadcast &lt;текст&gt;"
+            "/tickets, /reply, /close\n"
+            "/stats, /broadcast, /rules\n"
+            "/ban &lt;id&gt;, /unban &lt;id&gt;\n"
+            "/mute &lt;id&gt; &lt;мин&gt;, /unmute &lt;id&gt;\n"
+            "/banned"
         )
     else:
         await message.answer(
             "❓ <b>Помощь</b>\n\n"
             "Просто напишите ваш вопрос — оператор ответит здесь же.\n\n"
-            "Можно отправлять текст, фото, видео, документы, голосовые."
+            "📜 /rules — правила поддержки"
         )
+
+
+@dp.message(Command("rules"))
+async def rules_cmd(message: types.Message):
+    await message.answer(RULES_TEXT)
 
 
 @dp.message(Command("whoami"))
@@ -115,6 +133,12 @@ async def whoami(message: types.Message):
 @dp.callback_query(F.data == "write_support")
 async def cb_write(call: CallbackQuery):
     await call.message.answer("✍️ Напишите ваше сообщение — отправим в поддержку.")
+    await call.answer()
+
+
+@dp.callback_query(F.data == "rules")
+async def cb_rules(call: CallbackQuery):
+    await call.message.answer(RULES_TEXT)
     await call.answer()
 
 
@@ -154,8 +178,29 @@ async def cb_my_tickets(call: CallbackQuery):
 async def user_message(message: types.Message):
     user = message.from_user
 
+    # проверка бана/мута
+    if db.is_banned(user.id):
+        b = db.get_ban(user.id)
+        if b and b["type"] == "mute":
+            try:
+                until = datetime.fromisoformat(b["reason"])
+                mins = int((until - datetime.utcnow()).total_seconds() / 60) + 1
+                await message.answer(f"⏳ Вы в тайм-ауте. Осталось ~{mins} мин.")
+            except Exception:
+                await message.answer("⏳ Вы в тайм-ауте.")
+        else:
+            await message.answer("🚫 Вы заблокированы в этом боте.")
+        return
+
+    # антифлуд
     if is_flooding(user.id):
-        await message.answer("⏳ Слишком много сообщений. Подождите минуту.")
+        n = strikes.get(user.id, 0)
+        if n >= ANTIFLOOD_STRIKES_TO_BAN:
+            until = (datetime.utcnow() + timedelta(minutes=ANTIFLOOD_MUTE * 5)).isoformat()
+            db.ban_user(user.id, until, bot.id, kind="mute")
+            await message.answer("🚫 Превышен лимит. Временная блокировка.")
+        else:
+            await message.answer("⏳ Слишком много сообщений. Подождите минуту.")
         return
 
     db.upsert_user(user.id, user.username or "", user.full_name)
@@ -198,7 +243,7 @@ async def user_message(message: types.Message):
             logging.warning(f"Не смог отправить админу {admin_id}: {e}")
 
     if delivered:
-        await message.answer(f"✅ Отправлено в поддержку. Номер обращения: <b>#{ticket_id:04d}</b>")
+        await message.answer(f"✅ Отправлено. Номер обращения: <b>#{ticket_id:04d}</b>")
     else:
         await message.answer("⚠️ Не удалось отправить. Попробуйте позже.")
 
@@ -282,13 +327,15 @@ async def cmd_close(message: types.Message):
 async def cmd_stats(message: types.Message):
     s = db.get_stats()
     avg = f"{s['avg_minutes']} мин" if s["avg_minutes"] is not None else "—"
+    bans_count = len(db.list_bans())
 
     lines = [
         "📊 <b>Статистика</b>\n",
         f"📨 Всего обращений: <b>{s['total']}</b>",
         f"📅 За сегодня: <b>{s['today']}</b>",
         f"🟢 Открытых: <b>{s['open']}</b>",
-        f"⏱ Среднее время первого ответа: <b>{avg}</b>\n",
+        f"⏱ Среднее время первого ответа: <b>{avg}</b>",
+        f"🚫 Забанено/в муте: <b>{bans_count}</b>\n",
         "🏆 <b>Топ-5 активных:</b>"
     ]
     if s["top_users"]:
@@ -313,6 +360,8 @@ async def cmd_broadcast(message: types.Message):
     await message.answer(f"📤 Рассылаю {len(user_ids)} пользователям…")
 
     for uid in user_ids:
+        if db.is_banned(uid):
+            continue
         try:
             await bot.send_message(uid, f"📢 <b>Сообщение от Little Dreams:</b>\n\n{text}")
             ok += 1
@@ -323,7 +372,117 @@ async def cmd_broadcast(message: types.Message):
     await message.answer(f"✅ Готово. Доставлено: {ok}, ошибок: {fail}.")
 
 
-# ================== ОТВЕТ АДМИНА ЧЕРЕЗ REPLY ==================
+# ================== БАНЫ И МУТЫ ==================
+
+@dp.message(F.from_user.id.in_(ADMIN_IDS), Command("ban"))
+async def cmd_ban(message: types.Message):
+    parts = (message.text or "").split(maxsplit=2)
+    if len(parts) < 2 or not parts[1].isdigit():
+        await message.answer("Использование: <code>/ban &lt;id&gt; [причина]</code>")
+        return
+
+    uid = int(parts[1])
+    reason = parts[2] if len(parts) > 2 else "без причины"
+
+    if uid in ADMIN_IDS:
+        await message.answer("❌ Нельзя забанить админа.")
+        return
+
+    db.ban_user(uid, reason, message.from_user.id, kind="ban")
+
+    try:
+        await bot.send_message(uid, f"🚫 Вы заблокированы.\nПричина: {reason}")
+    except Exception:
+        pass
+
+    await message.answer(f"✅ Пользователь <code>{uid}</code> заблокирован.")
+
+
+@dp.message(F.from_user.id.in_(ADMIN_IDS), Command("unban"))
+async def cmd_unban(message: types.Message):
+    parts = (message.text or "").split()
+    if len(parts) < 2 or not parts[1].isdigit():
+        await message.answer("Использование: <code>/unban &lt;id&gt;</code>")
+        return
+
+    uid = int(parts[1])
+    db.unban_user(uid)
+
+    try:
+        await bot.send_message(uid, "✅ Блокировка снята. Можете писать снова.")
+    except Exception:
+        pass
+
+    await message.answer(f"✅ Пользователь <code>{uid}</code> разбанен.")
+
+
+@dp.message(F.from_user.id.in_(ADMIN_IDS), Command("mute"))
+async def cmd_mute(message: types.Message):
+    parts = (message.text or "").split()
+    if len(parts) < 3 or not parts[1].isdigit() or not parts[2].isdigit():
+        await message.answer("Использование: <code>/mute &lt;id&gt; &lt;минуты&gt;</code>")
+        return
+
+    uid = int(parts[1])
+    minutes = int(parts[2])
+
+    if uid in ADMIN_IDS:
+        await message.answer("❌ Нельзя замутить админа.")
+        return
+
+    until = (datetime.utcnow() + timedelta(minutes=minutes)).isoformat()
+    db.ban_user(uid, until, message.from_user.id, kind="mute")
+
+    try:
+        await bot.send_message(uid, f"⏳ Тайм-аут на {minutes} мин.")
+    except Exception:
+        pass
+
+    await message.answer(f"✅ Пользователь <code>{uid}</code> в тайм-ауте {minutes} мин.")
+
+
+@dp.message(F.from_user.id.in_(ADMIN_IDS), Command("unmute"))
+async def cmd_unmute(message: types.Message):
+    parts = (message.text or "").split()
+    if len(parts) < 2 or not parts[1].isdigit():
+        await message.answer("Использование: <code>/unmute &lt;id&gt;</code>")
+        return
+
+    uid = int(parts[1])
+    db.unban_user(uid)
+
+    try:
+        await bot.send_message(uid, "✅ Тайм-аут снят.")
+    except Exception:
+        pass
+
+    await message.answer(f"✅ Тайм-аут с <code>{uid}</code> снят.")
+
+
+@dp.message(F.from_user.id.in_(ADMIN_IDS), Command("banned"))
+async def cmd_banned(message: types.Message):
+    bans = db.list_bans()
+    if not bans:
+        await message.answer("📭 Список пуст.")
+        return
+
+    lines = [f"🚫 <b>Заблокированные ({len(bans)}):</b>\n"]
+    for b in bans[:30]:
+        icon = "🚫" if b["type"] == "ban" else "⏳"
+        reason = b["reason"]
+        if b["type"] == "mute":
+            try:
+                until = datetime.fromisoformat(reason)
+                mins = int((until - datetime.utcnow()).total_seconds() / 60)
+                reason = f"ещё ~{mins} мин" if mins > 0 else "истёк"
+            except Exception:
+                pass
+        lines.append(f"{icon} <code>{b['user_id']}</code> — {reason}")
+
+    await message.answer("\n".join(lines))
+
+
+# ================== REPLY-ОТВЕТ АДМИНА ==================
 
 @dp.message(F.from_user.id.in_(ADMIN_IDS), F.reply_to_message)
 async def admin_reply(message: types.Message):
@@ -413,53 +572,4 @@ async def auto_reply_worker():
                 logging.warning(f"Автоответ не доставлен: {e}")
 
 
-# ================== МЕНЮ КОМАНД ==================
-
-async def set_commands():
-    await bot.set_my_commands([
-        BotCommand(command="start", description="Начать"),
-        BotCommand(command="help", description="Помощь"),
-        BotCommand(command="whoami", description="Мой ID"),
-    ])
-
-
-async def set_admin_commands(admin_id: int):
-    try:
-        await bot.set_my_commands([
-            BotCommand(command="start", description="Начать"),
-            BotCommand(command="tickets", description="Открытые обращения"),
-            BotCommand(command="reply", description="Ответ: /reply <id> <текст>"),
-            BotCommand(command="close", description="Закрыть: /close <id>"),
-            BotCommand(command="stats", description="Статистика"),
-            BotCommand(command="broadcast", description="Рассылка"),
-        ], scope=types.BotCommandScopeChat(chat_id=admin_id))
-    except Exception as e:
-        logging.warning(f"Не смог установить команды для админа {admin_id}: {e}")
-
-
-# ================== ЗАПУСК ==================
-
-async def on_startup(bot: Bot):
-    db.init_db()
-    logging.info(f"🚀 ADMIN_IDS = {ADMIN_IDS}")
-    logging.info(f"🚀 WEBHOOK_URL = {WEBHOOK_URL}")
-
-    await bot.set_webhook(WEBHOOK_URL)
-    await set_commands()
-    for admin_id in ADMIN_IDS:
-        await set_admin_commands(admin_id)
-
-    asyncio.create_task(auto_reply_worker())
-    logging.info("✅ Webhook установлен, фоновые задачи запущены")
-
-
-def main():
-    dp.startup.register(on_startup)
-    app = web.Application()
-    SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
-    setup_application(app, dp, bot=bot)
-    web.run_app(app, host="0.0.0.0", port=PORT)
-
-
-if __name__ == "__main__":
-    main()
+# ================== МЕН
