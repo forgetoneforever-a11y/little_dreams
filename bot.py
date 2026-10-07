@@ -8,7 +8,7 @@ from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_applicati
 
 # ==== НАСТРОЙКИ ====
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID"))
+ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()]
 WEBHOOK_HOST = os.getenv("WEBHOOK_HOST")
 WEBHOOK_PATH = "/webhook"
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
@@ -19,13 +19,12 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
-# Храним связь: message_id_у_админа -> user_id
-# В проде лучше заменить на БД (sqlite/redis)
+# message_id_у_админа -> user_id (кто автор обращения)
 pending: dict[int, int] = {}
 
 
-# ==== Сообщения от пользователей ====
-@dp.message(F.chat.type == "private", ~F.from_user.id == ADMIN_ID)
+# ==== Сообщения от пользователей (не админов) ====
+@dp.message(F.chat.type == "private", ~F.from_user.id.in_(ADMIN_IDS))
 async def user_message(message: types.Message):
     user_id = message.from_user.id
     username = message.from_user.username or "—"
@@ -36,22 +35,23 @@ async def user_message(message: types.Message):
         f"👤 {full_name} (@{username})\n"
         f"🆔 <code>{user_id}</code>\n"
         f"———\n"
-        f"↩️ <i>Ответьте Reply на это сообщение, чтобы ответить</i>"
+        f"↩️ <i>Ответьте Reply на это сообщение</i>"
     )
 
-    # Пересылаем админу с шапкой
-    sent = await bot.send_message(ADMIN_ID, header)
-    copied = await message.copy_to(ADMIN_ID)
-
-    # Запоминаем оба id (на случай reply на шапку или на копию)
-    pending[sent.message_id] = user_id
-    pending[copied.message_id] = user_id
+    for admin_id in ADMIN_IDS:
+        try:
+            sent = await bot.send_message(admin_id, header)
+            copied = await message.copy_to(admin_id)
+            pending[sent.message_id] = user_id
+            pending[copied.message_id] = user_id
+        except Exception as e:
+            logging.warning(f"Не смог отправить админу {admin_id}: {e}")
 
     await message.answer("✅ Сообщение отправлено в поддержку. Ожидайте ответа.")
 
 
-# ==== Ответ админа через Reply ====
-@dp.message(F.from_user.id == ADMIN_ID, F.reply_to_message)
+# ==== Ответ любого админа через Reply ====
+@dp.message(F.from_user.id.in_(ADMIN_IDS), F.reply_to_message)
 async def admin_reply(message: types.Message):
     replied_id = message.reply_to_message.message_id
     user_id = pending.get(replied_id)
@@ -70,7 +70,7 @@ async def admin_reply(message: types.Message):
 # ==== /start ====
 @dp.message(F.text == "/start")
 async def start(message: types.Message):
-    if message.from_user.id == ADMIN_ID:
+    if message.from_user.id in ADMIN_IDS:
         await message.answer(
             "👋 Режим админа.\n"
             "Вам будут приходить сообщения пользователей.\n"
