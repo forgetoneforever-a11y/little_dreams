@@ -179,4 +179,85 @@
                 const s = document.createElement('div');
                 s.className = 'star';
                 s.style.left = Math.random() * 100 + '%';
-                s.style.animationDuration = (3 + Math.random
+                s.style.animationDuration = (3 + Math.random() * 4) + 's';
+                s.style.animationDelay = (Math.random() * 8) + 's';
+                const size = 1 + Math.random() * 2;
+                s.style.width = size + 'px';
+                s.style.height = size + 'px';
+                stars.appendChild(s);
+            }
+        }
+
+        // ===== Фоновые мерцающие точки =====
+        function createDots() {
+            const dots = document.getElementById('dots');
+            const count = 40;
+            for (let i = 0; i < count; i++) {
+                const d = document.createElement('div');
+                d.className = 'dot';
+                d.style.left = Math.random() * 100 + '%';
+                d.style.top = Math.random() * 100 + '%';
+                const size = 1 + Math.random() * 2;
+                d.style.width = size + 'px';
+                d.style.height = size + 'px';
+                d.style.animationDuration = (2 + Math.random() * 3) + 's';
+                d.style.animationDelay = (Math.random() * 5) + 's';
+                dots.appendChild(d);
+            }
+        }
+
+        createStars();
+        createDots();
+
+        // ===== Модалки =====
+        function openModal(id) {
+            document.getElementById(id).classList.add('active');
+            tg.HapticFeedback?.impactOccurred('light');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+
+        function closeOnBg(e) {
+            if (e.target.classList.contains('modal')) {
+                e.target.classList.remove('active');
+            }
+        }
+
+        function openWrite() { openModal('writeModal'); }
+
+        // ===== Отправка сообщения =====
+        function sendMessage() {
+            const text = document.getElementById('messageText').value.trim();
+            if (!text) {
+                showToast('Введите сообщение');
+                tg.HapticFeedback?.notificationOccurred('error');
+                return;
+            }
+            tg.sendData(JSON.stringify({ action: 'message', text: text }));
+            tg.HapticFeedback?.notificationOccurred('success');
+            showToast('Отправлено ✨');
+            document.getElementById('messageText').value = '';
+            setTimeout(() => {
+                closeModal('writeModal');
+                tg.close();
+            }, 900);
+        }
+
+        // ===== Мои обращения =====
+        function openTickets() {
+            openModal('ticketsModal');
+            tg.sendData(JSON.stringify({ action: 'get_tickets' }));
+        }
+
+        // ===== Toast =====
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 2200);
+        }
+    </script>
+</body>
+</html>
