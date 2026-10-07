@@ -572,4 +572,60 @@ async def auto_reply_worker():
                 logging.warning(f"Автоответ не доставлен: {e}")
 
 
-# ================== МЕН
+# ================== МЕНЮ КОМАНД ==================
+
+async def set_commands():
+    await bot.set_my_commands([
+        BotCommand(command="start", description="Начать"),
+        BotCommand(command="help", description="Помощь"),
+        BotCommand(command="rules", description="Правила"),
+        BotCommand(command="whoami", description="Мой ID"),
+    ])
+
+
+async def set_admin_commands(admin_id: int):
+    try:
+        await bot.set_my_commands([
+            BotCommand(command="start", description="Начать"),
+            BotCommand(command="tickets", description="Открытые обращения"),
+            BotCommand(command="reply", description="Ответ: /reply <id> <текст>"),
+            BotCommand(command="close", description="Закрыть: /close <id>"),
+            BotCommand(command="stats", description="Статистика"),
+            BotCommand(command="broadcast", description="Рассылка"),
+            BotCommand(command="ban", description="Забанить: /ban <id> [причина]"),
+            BotCommand(command="unban", description="Разбанить: /unban <id>"),
+            BotCommand(command="mute", description="Тайм-аут: /mute <id> <мин>"),
+            BotCommand(command="unmute", description="Снять тайм-аут"),
+            BotCommand(command="banned", description="Список заблокированных"),
+            BotCommand(command="rules", description="Правила"),
+        ], scope=types.BotCommandScopeChat(chat_id=admin_id))
+    except Exception as e:
+        logging.warning(f"Не смог установить команды для админа {admin_id}: {e}")
+
+
+# ================== ЗАПУСК ==================
+
+async def on_startup(bot: Bot):
+    db.init_db()
+    logging.info(f"🚀 ADMIN_IDS = {ADMIN_IDS}")
+    logging.info(f"🚀 WEBHOOK_URL = {WEBHOOK_URL}")
+
+    await bot.set_webhook(WEBHOOK_URL)
+    await set_commands()
+    for admin_id in ADMIN_IDS:
+        await set_admin_commands(admin_id)
+
+    asyncio.create_task(auto_reply_worker())
+    logging.info("✅ Webhook установлен, фоновые задачи запущены")
+
+
+def main():
+    dp.startup.register(on_startup)
+    app = web.Application()
+    SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
+    setup_application(app, dp, bot=bot)
+    web.run_app(app, host="0.0.0.0", port=PORT)
+
+
+if __name__ == "__main__":
+    main()
