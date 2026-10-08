@@ -43,7 +43,7 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
-/* Размытый фон из картинки — поверх градиента, но под контентом */
+/* Размытый фон из картинки */
 body::after {
     content: '';
     position: fixed;
@@ -59,14 +59,13 @@ body::after {
     opacity: 0.85;
 }
 
-/* Переливающийся градиент */
 @keyframes gradientShift {
     0%   { background-position: 0% 50%; }
     50%  { background-position: 100% 50%; }
     100% { background-position: 0% 50%; }
 }
 
-/* Мягкие светящиеся пятна (поверх фото) */
+/* Светящиеся пятна поверх фото */
 body::before {
     content: '';
     position: fixed;
@@ -96,110 +95,122 @@ body::before {
     z-index: 1;
 }
 
+/* Мелкая тонкая струйка */
 .drop {
     position: absolute;
-    top: -120px;
-    width: 1.5px;
-    height: 90px;
+    top: -60px;
+    width: 0.8px;
+    height: 22px;
     background: linear-gradient(
         to bottom,
         transparent 0%,
-        rgba(180, 200, 255, 0.15) 20%,
-        rgba(200, 220, 255, 0.6) 70%,
-        rgba(255, 255, 255, 0.9) 100%
+        rgba(200, 215, 255, 0.35) 30%,
+        rgba(220, 230, 255, 0.75) 100%
     );
-    border-radius: 50%;
-    filter: blur(0.4px);
-    box-shadow: 0 0 4px rgba(180, 200, 255, 0.35);
-    animation: rainFall linear infinite;
+    border-radius: 1px;
+    filter: blur(0.2px);
     opacity: 0;
+    animation: rainFall linear infinite;
+    will-change: transform, opacity;
 }
 
-.drop.fast {
-    height: 130px;
-    width: 2px;
-    opacity: 0.85;
-    filter: blur(0.6px);
-    box-shadow: 0 0 6px rgba(200, 220, 255, 0.45);
-}
-
-.drop.slow {
-    height: 60px;
+/* Средние — длиннее и заметнее */
+.drop.med {
     width: 1px;
-    opacity: 0.55;
-    filter: blur(0.3px);
+    height: 32px;
+    background: linear-gradient(
+        to bottom,
+        transparent 0%,
+        rgba(200, 215, 255, 0.25) 25%,
+        rgba(230, 240, 255, 0.85) 100%
+    );
+    box-shadow: 0 0 3px rgba(190, 210, 255, 0.4);
+}
+
+/* Длинные быстрые — редкие, для глубины */
+.drop.long {
+    width: 1.2px;
+    height: 46px;
+    background: linear-gradient(
+        to bottom,
+        transparent 0%,
+        rgba(200, 215, 255, 0.2) 20%,
+        rgba(240, 245, 255, 0.9) 100%
+    );
+    box-shadow: 0 0 4px rgba(200, 220, 255, 0.5);
+    filter: blur(0.4px);
 }
 
 @keyframes rainFall {
     0% {
-        transform: translateY(0) translateX(0);
+        transform: translate3d(0, 0, 0);
         opacity: 0;
     }
-    10% {
-        opacity: 1;
+    8% {
+        opacity: 0.9;
     }
-    90% {
-        opacity: 1;
+    85% {
+        opacity: 0.9;
     }
     100% {
-        transform: translateY(110vh) translateX(-30px);
-        opacity: 0.9;
+        transform: translate3d(-40px, 110vh, 0);
+        opacity: 0;
     }
 }
 
-/* Брызги внизу */
+/* Брызги — мелкие, редкие */
 .splash {
     position: absolute;
-    bottom: -10px;
-    width: 4px;
-    height: 4px;
+    bottom: 2px;
+    width: 2px;
+    height: 2px;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(200, 220, 255, 0.5), transparent 70%);
+    background: rgba(220, 230, 255, 0.6);
     animation: splashPop linear infinite;
     opacity: 0;
     pointer-events: none;
 }
 
 @keyframes splashPop {
-    0%, 92% {
+    0%, 96% {
         transform: scale(0);
         opacity: 0;
     }
-    94% {
+    97% {
         transform: scale(1);
-        opacity: 0.7;
+        opacity: 0.6;
     }
     100% {
-        transform: scale(2.2);
+        transform: scale(2);
         opacity: 0;
     }
 }
 
-/* Лёгкая дымка внизу экрана */
+/* Лёгкая дымка внизу */
 .mist {
     position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
-    height: 35vh;
+    height: 30vh;
     background: linear-gradient(
         to top,
-        rgba(140, 160, 220, 0.08) 0%,
-        rgba(120, 140, 200, 0.04) 40%,
+        rgba(140, 160, 220, 0.06) 0%,
+        rgba(120, 140, 200, 0.03) 40%,
         transparent 100%
     );
     pointer-events: none;
     z-index: 1;
-    filter: blur(20px);
-    animation: mistDrift 12s ease-in-out infinite alternate;
+    filter: blur(24px);
+    animation: mistDrift 14s ease-in-out infinite alternate;
 }
 
 @keyframes mistDrift {
-    0%   { opacity: 0.6; transform: translateX(-2%); }
-    100% { opacity: 0.9; transform: translateX(2%); }
+    0%   { opacity: 0.5; transform: translateX(-1%); }
+    100% { opacity: 0.8; transform: translateX(1%); }
 }
 
-/* Далёкие звёзды за тучами (мерцающие точки) */
+/* Мерцающие звёзды за тучами */
 .dots {
     position: fixed;
     inset: 0;
@@ -852,4 +863,4 @@ h1 {
 
 * {
     transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
-}ы
+}
