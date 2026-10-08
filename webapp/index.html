@@ -5,12 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Little Dreams — Поддержка</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="/webapp/style.css?v=7">
+    <link rel="stylesheet" href="/webapp/style.css?v=8">
 </head>
 <body>
+    <!-- Эффекты фона -->
+    <div class="light-beam"></div>
     <div class="rain" id="rain"></div>
     <div class="mist"></div>
     <div class="dots" id="dots"></div>
+    <div class="sparks" id="sparks"></div>
+    <div class="glass-drops" id="glassDrops"></div>
+    <div class="vignette"></div>
 
     <div class="header">
         <div class="avatar">
@@ -182,7 +187,7 @@
             }
         }
 
-        // ===== Мерцающие звёзды =====
+        // ===== Звёзды =====
         function createDots() {
             const dots = document.getElementById('dots');
             for (let i = 0; i < 40; i++) {
@@ -199,8 +204,45 @@
             }
         }
 
+        // ===== Искры, летящие вверх =====
+        function createSparks() {
+            const sparks = document.getElementById('sparks');
+            const total = 18;
+            for (let i = 0; i < total; i++) {
+                const s = document.createElement('div');
+                s.className = 'spark';
+                s.style.left = Math.random() * 100 + '%';
+                const size = 1.5 + Math.random() * 2.5;
+                s.style.width = size + 'px';
+                s.style.height = size + 'px';
+                s.style.animationDuration = (8 + Math.random() * 8) + 's';
+                s.style.animationDelay = (Math.random() * 12) + 's';
+                sparks.appendChild(s);
+            }
+        }
+
+        // ===== Капли на стекле =====
+        function createGlassDrops() {
+            const container = document.getElementById('glassDrops');
+            const total = 12;
+            for (let i = 0; i < total; i++) {
+                const d = document.createElement('div');
+                d.className = 'glass-drop';
+                const size = 4 + Math.random() * 10; // 4–14px
+                d.style.width = size + 'px';
+                d.style.height = (size * 1.15) + 'px';
+                d.style.left = Math.random() * 100 + '%';
+                d.style.top = '-20px';
+                d.style.animationDuration = (6 + Math.random() * 10) + 's';
+                d.style.animationDelay = (Math.random() * 15) + 's';
+                container.appendChild(d);
+            }
+        }
+
         createRain();
         createDots();
+        createSparks();
+        createGlassDrops();
 
         // ===== Модалки =====
         function openModal(id) {
@@ -320,7 +362,6 @@
             return div.innerHTML;
         }
 
-        // ===== Toast =====
         function showToast(msg) {
             const t = document.getElementById('toast');
             t.textContent = msg;
