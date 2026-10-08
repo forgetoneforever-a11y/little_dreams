@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Little Dreams — Поддержка</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="/webapp/style.css?v=5">
+    <link rel="stylesheet" href="/webapp/style.css?v=6">
 </head>
 <body>
     <div class="rain" id="rain"></div>
@@ -190,35 +190,44 @@
         // ===== Дождь =====
         function createRain() {
             const rain = document.getElementById('rain');
-            const totalDrops = 80;
+            const totalDrops = 140;
 
             for (let i = 0; i < totalDrops; i++) {
                 const drop = document.createElement('div');
                 drop.className = 'drop';
 
                 const rnd = Math.random();
-                if (rnd < 0.25) drop.classList.add('fast');
-                else if (rnd < 0.6) drop.classList.add('slow');
+                if (rnd < 0.6) {
+                    // мелкие (по умолчанию)
+                } else if (rnd < 0.9) {
+                    drop.classList.add('med');
+                } else {
+                    drop.classList.add('long');
+                }
 
-                drop.style.left = Math.random() * 110 + '%';
-                drop.style.animationDuration = (0.6 + Math.random() * 1.4) + 's';
-                drop.style.animationDelay = (Math.random() * 5) + 's';
+                drop.style.left = Math.random() * 115 + '%';
+
+                const baseDuration = drop.classList.contains('long') ? 0.9
+                                   : drop.classList.contains('med') ? 0.65
+                                   : 0.5;
+                drop.style.animationDuration = (baseDuration + Math.random() * 0.5) + 's';
+                drop.style.animationDelay = (Math.random() * 4) + 's';
 
                 rain.appendChild(drop);
             }
 
-            // Брызги внизу
-            for (let i = 0; i < 25; i++) {
+            // Брызги — редкие
+            for (let i = 0; i < 15; i++) {
                 const s = document.createElement('div');
                 s.className = 'splash';
                 s.style.left = Math.random() * 100 + '%';
-                s.style.animationDuration = (2 + Math.random() * 3) + 's';
-                s.style.animationDelay = (Math.random() * 4) + 's';
+                s.style.animationDuration = (3 + Math.random() * 4) + 's';
+                s.style.animationDelay = (Math.random() * 6) + 's';
                 rain.appendChild(s);
             }
         }
 
-        // ===== Мерцающие точки (звёзды за тучами) =====
+        // ===== Мерцающие звёзды =====
         function createDots() {
             const dots = document.getElementById('dots');
             for (let i = 0; i < 40; i++) {
