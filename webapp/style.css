@@ -1,5 +1,5 @@
 /* ============================================
-   Little Dreams — Cosmic Rain Mini App
+   Little Dreams — Premium Cosmic Rain
    ============================================ */
 
 :root {
@@ -65,7 +65,7 @@ body::after {
     100% { background-position: 0% 50%; }
 }
 
-/* Светящиеся пятна поверх фото */
+/* Светящиеся пятна */
 body::before {
     content: '';
     position: fixed;
@@ -85,6 +85,84 @@ body::before {
     100% { transform: translate(-3%, 2%) scale(1.02); }
 }
 
+/* ============ Луч света сверху ============ */
+.light-beam {
+    position: fixed;
+    top: -30%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60vw;
+    height: 90vh;
+    background: radial-gradient(
+        ellipse at top center,
+        rgba(200, 180, 255, 0.14) 0%,
+        rgba(168, 85, 247, 0.06) 35%,
+        transparent 70%
+    );
+    pointer-events: none;
+    z-index: 1;
+    filter: blur(30px);
+    animation: beamPulse 8s ease-in-out infinite alternate;
+}
+
+@keyframes beamPulse {
+    0%   { opacity: 0.6; transform: translateX(-50%) scaleY(1); }
+    100% { opacity: 1;   transform: translateX(-50%) scaleY(1.1); }
+}
+
+/* ============ Виньетка по краям ============ */
+.vignette {
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(
+        ellipse at center,
+        transparent 40%,
+        rgba(0, 0, 0, 0.35) 80%,
+        rgba(0, 0, 0, 0.6) 100%
+    );
+    pointer-events: none;
+    z-index: 3;
+}
+
+/* ============ Искры, летящие вверх ============ */
+.sparks {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+    z-index: 2;
+}
+
+.spark {
+    position: absolute;
+    bottom: -20px;
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: rgba(200, 180, 255, 0.9);
+    box-shadow: 0 0 8px rgba(200, 180, 255, 0.9),
+                0 0 16px rgba(168, 85, 247, 0.5);
+    animation: sparkRise linear infinite;
+    opacity: 0;
+}
+
+@keyframes sparkRise {
+    0% {
+        transform: translateY(0) translateX(0) scale(0.4);
+        opacity: 0;
+    }
+    15% {
+        opacity: 0.9;
+    }
+    85% {
+        opacity: 0.7;
+    }
+    100% {
+        transform: translateY(-110vh) translateX(30px) scale(1.2);
+        opacity: 0;
+    }
+}
+
 /* ============ Дождь ============ */
 
 .rain {
@@ -95,7 +173,6 @@ body::before {
     z-index: 1;
 }
 
-/* Мелкая тонкая струйка */
 .drop {
     position: absolute;
     top: -60px;
@@ -114,7 +191,6 @@ body::before {
     will-change: transform, opacity;
 }
 
-/* Средние — длиннее и заметнее */
 .drop.med {
     width: 1px;
     height: 32px;
@@ -127,7 +203,6 @@ body::before {
     box-shadow: 0 0 3px rgba(190, 210, 255, 0.4);
 }
 
-/* Длинные быстрые — редкие, для глубины */
 .drop.long {
     width: 1.2px;
     height: 46px;
@@ -158,7 +233,52 @@ body::before {
     }
 }
 
-/* Брызги — мелкие, редкие */
+/* ============ Капли на стекле ============ */
+.glass-drops {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+    z-index: 4;
+}
+
+.glass-drop {
+    position: absolute;
+    border-radius: 50%;
+    background: radial-gradient(
+        circle at 30% 30%,
+        rgba(255, 255, 255, 0.5),
+        rgba(200, 220, 255, 0.15) 45%,
+        rgba(150, 180, 255, 0.05) 70%,
+        transparent 100%
+    );
+    box-shadow:
+        inset -1px -1px 4px rgba(255, 255, 255, 0.25),
+        inset 1px 1px 3px rgba(150, 180, 255, 0.15),
+        0 0 6px rgba(200, 220, 255, 0.15);
+    animation: dropSlide linear infinite;
+    backdrop-filter: blur(0.5px);
+    -webkit-backdrop-filter: blur(0.5px);
+}
+
+@keyframes dropSlide {
+    0% {
+        transform: translate(0, 0);
+        opacity: 0;
+    }
+    10% {
+        opacity: 0.85;
+    }
+    85% {
+        opacity: 0.85;
+    }
+    100% {
+        transform: translate(-15px, 105vh);
+        opacity: 0;
+    }
+}
+
+/* ============ Брызги ============ */
 .splash {
     position: absolute;
     bottom: 2px;
@@ -186,7 +306,7 @@ body::before {
     }
 }
 
-/* Лёгкая дымка внизу */
+/* ============ Дымка внизу ============ */
 .mist {
     position: fixed;
     bottom: 0;
@@ -210,7 +330,7 @@ body::before {
     100% { opacity: 0.8; transform: translateX(1%); }
 }
 
-/* Мерцающие звёзды за тучами */
+/* ============ Мерцающие звёзды ============ */
 .dots {
     position: fixed;
     inset: 0;
@@ -231,11 +351,11 @@ body::before {
     50%      { opacity: 0.5; transform: scale(1.1); }
 }
 
-/* ============ Контент поверх фона ============ */
+/* ============ Контент ============ */
 
 .header, .banner, .menu, .profile, .footer {
     position: relative;
-    z-index: 2;
+    z-index: 5;
 }
 
 /* ============ Шапка ============ */
@@ -283,6 +403,20 @@ body::before {
     opacity: 0.75;
 }
 
+/* Внутренняя подсветка аватарки */
+.avatar::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: radial-gradient(
+        circle at 30% 25%,
+        rgba(255, 255, 255, 0.18) 0%,
+        transparent 45%
+    );
+    pointer-events: none;
+}
+
 @keyframes float {
     0%, 100% { transform: translateY(0); }
     50%      { transform: translateY(-8px); }
@@ -293,16 +427,31 @@ body::before {
     50%      { box-shadow: 0 0 60px rgba(236, 72, 153, 0.55), 0 0 100px rgba(168, 85, 247, 0.4); }
 }
 
+/* Заголовок с шиммером */
 h1 {
     font-size: 26px;
     font-weight: 800;
     margin-bottom: 6px;
     letter-spacing: -0.6px;
-    background: linear-gradient(135deg, #ffffff 0%, #c084fc 50%, #f0abfc 100%);
+    background: linear-gradient(
+        90deg,
+        #ffffff 0%,
+        #c084fc 25%,
+        #f0abfc 50%,
+        #c084fc 75%,
+        #ffffff 100%
+    );
+    background-size: 200% auto;
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
     filter: drop-shadow(0 0 20px rgba(192, 132, 252, 0.4));
+    animation: shimmerText 4s linear infinite;
+}
+
+@keyframes shimmerText {
+    0%   { background-position: 0% center; }
+    100% { background-position: 200% center; }
 }
 
 .subtitle {
@@ -370,7 +519,7 @@ h1 {
     max-height: 220px;
 }
 
-/* ============ Сетка кнопок ============ */
+/* ============ Меню ============ */
 
 .menu {
     display: grid;
@@ -391,7 +540,8 @@ h1 {
     align-items: flex-start;
     gap: 12px;
     cursor: pointer;
-    transition: transform 0.2s, background 0.3s, border-color 0.3s, box-shadow 0.3s;
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+                background 0.3s, border-color 0.3s, box-shadow 0.3s;
     user-select: none;
     position: relative;
     overflow: hidden;
@@ -399,6 +549,7 @@ h1 {
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
 }
 
+/* Градиентная рамка сверху */
 .card::before {
     content: '';
     position: absolute;
@@ -409,11 +560,47 @@ h1 {
     background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
 }
 
+/* Светящийся блик слева-направо */
+.card::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -60%;
+    width: 40%;
+    height: 100%;
+    background: linear-gradient(
+        120deg,
+        transparent 0%,
+        rgba(200, 180, 255, 0.08) 40%,
+        rgba(255, 255, 255, 0.15) 50%,
+        rgba(200, 180, 255, 0.08) 60%,
+        transparent 100%
+    );
+    transform: skewX(-20deg);
+    transition: left 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+    pointer-events: none;
+}
+
+.card:hover::after {
+    left: 130%;
+}
+
 .card:active {
     transform: scale(0.96);
     background: rgba(168, 85, 247, 0.15);
     border-color: rgba(168, 85, 247, 0.4);
     box-shadow: 0 0 30px rgba(168, 85, 247, 0.3);
+}
+
+/* Постоянное мягкое свечение при hover (ПК) */
+@media (hover: hover) {
+    .card:hover {
+        transform: translateY(-2px);
+        box-shadow:
+            0 12px 40px rgba(0, 0, 0, 0.45),
+            0 0 40px rgba(168, 85, 247, 0.25);
+        border-color: rgba(168, 85, 247, 0.3);
+    }
 }
 
 .card.wide {
@@ -698,6 +885,13 @@ h1 {
 .btn:active {
     transform: scale(0.97);
     box-shadow: 0 4px 16px rgba(168, 85, 247, 0.5);
+}
+
+@media (hover: hover) {
+    .btn:hover {
+        background-position: 100% 50%;
+        box-shadow: 0 12px 32px rgba(168, 85, 247, 0.55);
+    }
 }
 
 .btn:disabled {
