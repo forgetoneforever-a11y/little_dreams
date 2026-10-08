@@ -1,5 +1,5 @@
 /* ============================================
-   Little Dreams — Cosmic Mini App
+   Little Dreams — Cosmic Rain Mini App
    ============================================ */
 
 :root {
@@ -53,7 +53,7 @@ body::after {
     background-position: center;
     background-repeat: no-repeat;
     filter: blur(14px) brightness(0.5) saturate(1.2);
-    transform: scale(1.1); /* прячет светлые края от blur */
+    transform: scale(1.1);
     z-index: -1;
     pointer-events: none;
     opacity: 0.85;
@@ -86,9 +86,9 @@ body::before {
     100% { transform: translate(-3%, 2%) scale(1.02); }
 }
 
-/* ============ Падающие звёзды ============ */
+/* ============ Дождь ============ */
 
-.stars {
+.rain {
     position: fixed;
     inset: 0;
     pointer-events: none;
@@ -96,45 +96,110 @@ body::before {
     z-index: 1;
 }
 
-.star {
+.drop {
     position: absolute;
-    top: -10px;
-    width: 2px;
-    height: 2px;
-    background: #ffffff;
+    top: -120px;
+    width: 1.5px;
+    height: 90px;
+    background: linear-gradient(
+        to bottom,
+        transparent 0%,
+        rgba(180, 200, 255, 0.15) 20%,
+        rgba(200, 220, 255, 0.6) 70%,
+        rgba(255, 255, 255, 0.9) 100%
+    );
     border-radius: 50%;
-    box-shadow: 0 0 6px 2px rgba(255, 255, 255, 0.85);
+    filter: blur(0.4px);
+    box-shadow: 0 0 4px rgba(180, 200, 255, 0.35);
+    animation: rainFall linear infinite;
     opacity: 0;
-    animation: starFall linear infinite;
 }
 
-.star::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 80px;
-    height: 1px;
-    background: linear-gradient(90deg, rgba(255,255,255,0.9) 0%, transparent 100%);
-    transform: rotate(45deg) translate(0, -50%);
-    transform-origin: left center;
+.drop.fast {
+    height: 130px;
+    width: 2px;
+    opacity: 0.85;
+    filter: blur(0.6px);
+    box-shadow: 0 0 6px rgba(200, 220, 255, 0.45);
 }
 
-@keyframes starFall {
+.drop.slow {
+    height: 60px;
+    width: 1px;
+    opacity: 0.55;
+    filter: blur(0.3px);
+}
+
+@keyframes rainFall {
     0% {
-        transform: translate(0, 0);
+        transform: translateY(0) translateX(0);
         opacity: 0;
     }
     10% {
         opacity: 1;
     }
+    90% {
+        opacity: 1;
+    }
     100% {
-        transform: translate(-500px, 500px);
+        transform: translateY(110vh) translateX(-30px);
+        opacity: 0.9;
+    }
+}
+
+/* Брызги внизу */
+.splash {
+    position: absolute;
+    bottom: -10px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(200, 220, 255, 0.5), transparent 70%);
+    animation: splashPop linear infinite;
+    opacity: 0;
+    pointer-events: none;
+}
+
+@keyframes splashPop {
+    0%, 92% {
+        transform: scale(0);
+        opacity: 0;
+    }
+    94% {
+        transform: scale(1);
+        opacity: 0.7;
+    }
+    100% {
+        transform: scale(2.2);
         opacity: 0;
     }
 }
 
-/* Мелкие мерцающие точки */
+/* Лёгкая дымка внизу экрана */
+.mist {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 35vh;
+    background: linear-gradient(
+        to top,
+        rgba(140, 160, 220, 0.08) 0%,
+        rgba(120, 140, 200, 0.04) 40%,
+        transparent 100%
+    );
+    pointer-events: none;
+    z-index: 1;
+    filter: blur(20px);
+    animation: mistDrift 12s ease-in-out infinite alternate;
+}
+
+@keyframes mistDrift {
+    0%   { opacity: 0.6; transform: translateX(-2%); }
+    100% { opacity: 0.9; transform: translateX(2%); }
+}
+
+/* Далёкие звёзды за тучами (мерцающие точки) */
 .dots {
     position: fixed;
     inset: 0;
@@ -147,12 +212,12 @@ body::before {
     background: #ffffff;
     border-radius: 50%;
     animation: twinkle ease-in-out infinite;
-    opacity: 0.7;
+    opacity: 0.4;
 }
 
 @keyframes twinkle {
-    0%, 100% { opacity: 0.2; transform: scale(0.8); }
-    50%      { opacity: 0.9; transform: scale(1.3); }
+    0%, 100% { opacity: 0.1; transform: scale(0.8); }
+    50%      { opacity: 0.5; transform: scale(1.1); }
 }
 
 /* ============ Контент поверх фона ============ */
@@ -169,7 +234,6 @@ body::before {
     padding: 24px 0 20px;
 }
 
-/* Аватарка с картинкой */
 .avatar {
     width: 96px;
     height: 96px;
@@ -195,7 +259,6 @@ body::before {
     filter: brightness(1.05) contrast(1.05);
 }
 
-/* Светящееся кольцо вокруг аватарки */
 .avatar::before {
     content: '';
     position: absolute;
@@ -789,4 +852,4 @@ h1 {
 
 * {
     transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
-}
+}ы
