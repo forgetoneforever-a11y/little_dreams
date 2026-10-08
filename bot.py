@@ -40,7 +40,7 @@ awaiting_reply: dict[int, float] = {}
 
 # ===== Папка с WebApp =====
 WEBAPP_DIR = os.path.join(os.path.dirname(__file__), "webapp")
-WEBAPP_URL = f"{WEBHOOK_HOST}/webapp?v=3"
+WEBAPP_URL = f"{WEBHOOK_HOST}/webapp?v=4"
 
 
 def is_admin(user_id: int) -> bool:
@@ -858,16 +858,27 @@ async def serve_webapp(request):
 
 
 async def serve_webapp_file(request):
-    filename = request.match_info.get("filename", "")
-    filepath = os.path.join(WEBAPP_DIR, filename)
-    if not os.path.abspath(filepath).startswith(os.path.abspath(WEBAPP_DIR)):
+    """Отдаёт статику WebApp (css, js, img, вложенные папки)."""
+    path = request.match_info.get("path", "")
+
+    # Защита от path traversal
+    filepath = os.path.normpath(os.path.join(WEBAPP_DIR, path))
+    if not filepath.startswith(os.path.abspath(WEBAPP_DIR)):
         return web.Response(status=403, text="Forbidden")
-    if not os.path.exists(filepath):
+
+    if not os.path.exists(filepath) or os.path.isdir(filepath):
         return web.Response(status=404, text="Not found")
 
     resp = web.FileResponse(filepath)
-    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    resp.headers["Pragma"] = "no-cache"
+
+    # CSS/HTML/JS — без кэша, чтобы обновления сразу подхватывались
+    if path.endswith((".css", ".html", ".js")):
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        resp.headers["Pragma"] = "no-cache"
+    else:
+        # Картинки, шрифты — кэшируем на час
+        resp.headers["Cache-Control"] = "public, max-age=3600"
+
     return resp
 
 
@@ -883,7 +894,7 @@ async def on_startup(bot: Bot):
     await setup_commands()
 
     asyncio.create_task(auto_reply_worker())
-    logging.info("✅ Webhook + меню + WebApp + API готовы")
+    logging.info("✅ Webhook + меню + WebApp + API + image готовы")
 
 
 def main():
@@ -892,10 +903,14 @@ def main():
 
     SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
 
+    # WebApp
     app.router.add_get("/webapp", serve_webapp)
     app.router.add_get("/webapp/", serve_webapp)
-    app.router.add_get("/webapp/{filename}", serve_webapp_file)
 
+    # ⚠️ ВАЖНО: этот роут должен идти ПОСЛЕДНИМ — он ловит всё, включая image/*
+    app.router.add_get("/webapp/{path:.*}", serve_webapp_file)
+
+    # API
     app.router.add_get("/api/profile", api_profile)
     app.router.add_get("/api/tickets", api_tickets)
     app.router.add_post("/api/message", api_message)
