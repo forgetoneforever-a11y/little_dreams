@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Little Dreams — Поддержка</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="/webapp/style.css?v=6">
+    <link rel="stylesheet" href="/webapp/style.css?v=7">
 </head>
 <body>
     <div class="rain" id="rain"></div>
@@ -53,24 +53,6 @@
             <div class="card-body">
                 <div class="card-title">Правила</div>
                 <div class="card-desc">Как мы работаем</div>
-            </div>
-        </div>
-
-        <div class="card" onclick="openModal('faqModal')">
-            <div class="card-arrow">›</div>
-            <div class="card-icon orange">❓</div>
-            <div class="card-body">
-                <div class="card-title">FAQ</div>
-                <div class="card-desc">Частые вопросы</div>
-            </div>
-        </div>
-
-        <div class="card" onclick="openModal('contactsModal')">
-            <div class="card-arrow">›</div>
-            <div class="card-icon cyan">📞</div>
-            <div class="card-body">
-                <div class="card-title">Контакты</div>
-                <div class="card-desc">Связь с нами</div>
             </div>
         </div>
     </div>
@@ -135,32 +117,6 @@
         </div>
     </div>
 
-    <!-- Модалка «FAQ» -->
-    <div class="modal" id="faqModal" onclick="closeOnBg(event)">
-        <div class="modal-content" onclick="event.stopPropagation()">
-            <div class="modal-handle"></div>
-            <h2>❓ Частые вопросы</h2>
-            <p><strong>💰 Цены</strong><br>Актуальные цены смотрите на сайте. Уточните товар — подскажем точнее.</p>
-            <p><strong>🚚 Доставка</strong><br>По всей России, 2–7 рабочих дней. Самовывоз — по договорённости.</p>
-            <p><strong>💳 Оплата</strong><br>Картой, СБП и переводом. Чек приходит на почту.</p>
-            <p><strong>🛡 Гарантия</strong><br>12 месяцев. При браке — заменим или вернём деньги.</p>
-            <p><strong>↩️ Возврат</strong><br>14 дней, если товар не использовался и упаковка сохранена.</p>
-            <button class="btn" onclick="closeModal('faqModal')" style="margin-top:14px;">Понятно ✨</button>
-        </div>
-    </div>
-
-    <!-- Модалка «Контакты» -->
-    <div class="modal" id="contactsModal" onclick="closeOnBg(event)">
-        <div class="modal-content" onclick="event.stopPropagation()">
-            <div class="modal-handle"></div>
-            <h2>📞 Контакты</h2>
-            <p><strong>💬 Telegram-канал</strong><br>@little_dreams_channel</p>
-            <p><strong>📧 Email</strong><br>support@littledreams.example</p>
-            <p><strong>🕐 График</strong><br>Пн–Пт, 10:00–19:00 (МСК)</p>
-            <button class="btn" onclick="closeModal('contactsModal')" style="margin-top:14px;">Понятно ✨</button>
-        </div>
-    </div>
-
     <div class="toast" id="toast"></div>
 
     <script>
@@ -216,7 +172,7 @@
                 rain.appendChild(drop);
             }
 
-            // Брызги — редкие
+            // Брызги
             for (let i = 0; i < 15; i++) {
                 const s = document.createElement('div');
                 s.className = 'splash';
