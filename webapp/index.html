@@ -5,10 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Little Dreams — Поддержка</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="/webapp/style.css?v=4">
+    <link rel="stylesheet" href="/webapp/style.css?v=5">
 </head>
 <body>
-    <div class="stars" id="stars"></div>
+    <div class="rain" id="rain"></div>
+    <div class="mist"></div>
     <div class="dots" id="dots"></div>
 
     <div class="header">
@@ -186,21 +187,38 @@
             return res.json();
         }
 
-        function createStars() {
-            const stars = document.getElementById('stars');
-            for (let i = 0; i < 12; i++) {
+        // ===== Дождь =====
+        function createRain() {
+            const rain = document.getElementById('rain');
+            const totalDrops = 80;
+
+            for (let i = 0; i < totalDrops; i++) {
+                const drop = document.createElement('div');
+                drop.className = 'drop';
+
+                const rnd = Math.random();
+                if (rnd < 0.25) drop.classList.add('fast');
+                else if (rnd < 0.6) drop.classList.add('slow');
+
+                drop.style.left = Math.random() * 110 + '%';
+                drop.style.animationDuration = (0.6 + Math.random() * 1.4) + 's';
+                drop.style.animationDelay = (Math.random() * 5) + 's';
+
+                rain.appendChild(drop);
+            }
+
+            // Брызги внизу
+            for (let i = 0; i < 25; i++) {
                 const s = document.createElement('div');
-                s.className = 'star';
+                s.className = 'splash';
                 s.style.left = Math.random() * 100 + '%';
-                s.style.animationDuration = (3 + Math.random() * 4) + 's';
-                s.style.animationDelay = (Math.random() * 8) + 's';
-                const size = 1 + Math.random() * 2;
-                s.style.width = size + 'px';
-                s.style.height = size + 'px';
-                stars.appendChild(s);
+                s.style.animationDuration = (2 + Math.random() * 3) + 's';
+                s.style.animationDelay = (Math.random() * 4) + 's';
+                rain.appendChild(s);
             }
         }
 
+        // ===== Мерцающие точки (звёзды за тучами) =====
         function createDots() {
             const dots = document.getElementById('dots');
             for (let i = 0; i < 40; i++) {
@@ -217,9 +235,10 @@
             }
         }
 
-        createStars();
+        createRain();
         createDots();
 
+        // ===== Модалки =====
         function openModal(id) {
             document.getElementById(id).classList.add('active');
             tg.HapticFeedback?.impactOccurred('light');
@@ -237,6 +256,7 @@
 
         function openWrite() { openModal('writeModal'); }
 
+        // ===== Отправка сообщения =====
         async function sendMessage() {
             const textarea = document.getElementById('messageText');
             const btn = document.getElementById('sendBtn');
@@ -282,6 +302,7 @@
             }
         }
 
+        // ===== Мои обращения =====
         async function openTickets() {
             openModal('ticketsModal');
             const list = document.getElementById('ticketsList');
@@ -335,6 +356,7 @@
             return div.innerHTML;
         }
 
+        // ===== Toast =====
         function showToast(msg) {
             const t = document.getElementById('toast');
             t.textContent = msg;
